@@ -1,0 +1,148 @@
+import { Resend } from 'resend';
+import { supabaseAdmin } from './supabase';
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+interface SendEmailArgs {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+  recipientType: 'host' | 'guest';
+  recipientId: string;
+  purpose: string;
+}
+
+export async function sendEmail(args: SendEmailArgs) {
+  try {
+    const result = await resend.emails.send({
+      from: process.env.EMAIL_FROM!,
+      to: args.to,
+      subject: args.subject,
+      html: args.html,
+      text: args.text,
+    });
+
+    await supabaseAdmin.from('notifications').insert({
+      recipient_type: args.recipientType,
+      recipient_id: args.recipientId,
+      channel: 'email',
+      purpose: args.purpose,
+      success: !result.error,
+      error_message: result.error?.message ?? null,
+      provider_id: result.data?.id ?? null,
+    });
+
+    return { ok: !result.error, id: result.data?.id, error: result.error?.message };
+  } catch (err: any) {
+    await supabaseAdmin.from('notifications').insert({
+      recipient_type: args.recipientType,
+      recipient_id: args.recipientId,
+      channel: 'email',
+      purpose: args.purpose,
+      success: false,
+      error_message: err?.message ?? String(err),
+    });
+    return { ok: false, error: err?.message ?? String(err) };
+  }
+}
+
+// ============================================================
+// Email templates
+// ============================================================
+
+const siteUrl = () => process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+const eventName = () => process.env.EVENT_NAME || 'Our Event';
+const eventDates = () => process.env.EVENT_DATES || '';
+
+export function hostReconfirmEmail(host: { name: string; confirm_token: string }) {
+  const link = `${siteUrl()}/host/${host.confirm_token}`;
+  const subject = `${eventName()}: Can you host again this year?`;
+  const html = `
+    <p>Hi ${host.name},</p>
+    <p>Thank you for hosting with us last year! We're organizing accommodation for <strong>${eventName()}</strong> (${eventDates()}) and hoped you might be available again.</p>
+    <p>Please click below to confirm your availability:</p>
+    <p><a href="${link}" style="display:inline-block;padding:12px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Confirm availability</a></p>
+    <p>Or copy this link: ${link}</p>
+    <p>Thank you so much for your generosity!</p>
+  `;
+  const text = `Hi ${host.name},\n\nCan you host again this year for ${eventName()} (${eventDates()})?\nConfirm here: ${link}\n\nThank you!`;
+  return { subject, html, text };
+}
+
+export function matchProposedHostEmail(args: {
+  hostName: string;
+  guestName: string;
+  arrival: string;
+  departure: string;
+  partySize: number;
+  token: string;
+}) {
+  const link = `${siteUrl()}/match/host/${args.token}`;
+  return {
+    subject: `${eventName()}: Guest match proposal`,
+    html: `
+      <p>Hi ${args.hostName},</p>
+      <p>We'd like to match you with a guest for ${eventName()}:</p>
+      <ul>
+        <li><strong>Guest:</strong> ${args.guestName}</li>
+        <li><strong>Party size:</strong> ${args.partySize}</li>
+        <li><strong>Arrival:</strong> ${args.arrival}</li>
+        <li><strong>Departure:</strong> ${args.departure}</li>
+      </ul>
+      <p><a href="${link}" style="display:inline-block;padding:12px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Accept or decline</a></p>
+      <p>Link: ${link}</p>
+    `,
+    text: `Guest match for ${eventName()}: ${args.guestName}, ${args.partySize} people, ${args.arrival} to ${args.departure}. Respond: ${link}`,
+  };
+}
+
+export function matchProposedGuestEmail(args: {
+  guestName: string;
+  arrival: string;
+  departure: string;
+  token: string;
+}) {
+  const link = `${siteUrl()}/match/guest/${args.token}`;
+  return {
+    subject: `${eventName()}: Accommodation match found`,
+    html: `
+      <p>Hi ${args.guestName},</p>
+      <p>We've found a host for your stay (${args.arrival} to ${args.departure}) at ${eventName()}.</p>
+      <p>Please confirm you still need accommodation:</p>
+      <p><a href="${link}" style="display:inline-block;padding:12px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Accept or decline</a></p>
+      <p>Once both you and the host confirm, we'll share contact details with each of you.</p>
+      <p>Link: ${link}</p>
+    `,
+    text: `Accommodation match found for ${args.arrival} to ${args.departure}. Respond: ${link}`,
+  };
+}
+
+export function contactsExchangedEmail(args: {
+  recipientName: string;
+  otherPartyName: string;
+  otherPartyEmail: string;
+  otherPartyPhone: string | null;
+  otherPartyAddress: string | null;
+  role: 'host' | 'guest';
+}) {
+  const roleLabel = args.role === 'host' ? 'guest' : 'host';
+  const addressLine = args.otherPartyAddress
+    ? `<li><strong>Address:</strong> ${args.otherPartyAddress}</li>`
+    : '';
+  return {
+    subject: `${eventName()}: Contact details for your ${roleLabel}`,
+    html: `
+      <p>Hi ${args.recipientName},</p>
+      <p>Your ${roleLabel} has confirmed the match. Here are their contact details:</p>
+      <ul>
+        <li><strong>Name:</strong> ${args.otherPartyName}</li>
+        <li><strong>Email:</strong> ${args.otherPartyEmail}</li>
+        ${args.otherPartyPhone ? `<li><strong>Phone:</strong> ${args.otherPartyPhone}</li>` : ''}
+        ${addressLine}
+      </ul>
+      <p>Please coordinate directly with them from here. Thank you!</p>
+    `,
+    text: `Your ${roleLabel}: ${args.otherPartyName}, ${args.otherPartyEmail}${args.otherPartyPhone ? ', ' + args.otherPartyPhone : ''}`,
+  };
+}

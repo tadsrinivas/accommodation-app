@@ -1,0 +1,428 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+
+export default function CoordinatorPage() {
+  const [password, setPassword] = useState('');
+  const [auth, setAuth] = useState<string | null>(null);
+
+  useEffect(() => {
+    const saved = typeof window !== 'undefined' ? window.sessionStorage.getItem('coord_pw') : null;
+    if (saved) setAuth(saved);
+  }, []);
+
+  if (!auth) {
+    return (
+      <div className="max-w-sm mx-auto bg-white rounded-lg border border-slate-200 p-6 mt-12">
+        <h1 className="text-xl font-semibold mb-4">Coordinator login</h1>
+        <input
+          type="password"
+          placeholder="Coordinator password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm mb-3"
+        />
+        <button
+          onClick={() => {
+            window.sessionStorage.setItem('coord_pw', password);
+            setAuth(password);
+          }}
+          className="w-full py-2 bg-blue-600 text-white rounded-md font-medium"
+        >
+          Login
+        </button>
+      </div>
+    );
+  }
+
+  return <Dashboard token={auth} onLogout={() => { window.sessionStorage.removeItem('coord_pw'); setAuth(null); }} />;
+}
+
+function Dashboard({ token, onLogout }: { token: string; onLogout: () => void }) {
+  const [tab, setTab] = useState<'hosts' | 'outreach' | 'guests' | 'matches' | 'intake'>('hosts');
+  const [hosts, setHosts] = useState<any[]>([]);
+  const [manualList, setManualList] = useState<any[]>([]);
+  const [guests, setGuests] = useState<any[]>([]);
+  const [proposals, setProposals] = useState<any[]>([]);
+  const [existing, setExisting] = useState<any[]>([]);
+  const [intakeSessions, setIntakeSessions] = useState<any[]>([]);
+  const [status, setStatus] = useState<string | null>(null);
+
+  const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+  async function loadHosts() {
+    const r = await fetch('/api/hosts', { headers });
+    if (r.status === 401) { onLogout(); return; }
+    const d = await r.json();
+    setHosts(d.hosts || []);
+  }
+  async function loadManual() {
+    const r = await fetch('/api/outreach/manual', { headers });
+    const d = await r.json();
+    setManualList(d.hosts || []);
+  }
+  async function loadGuests() {
+    const r = await fetch('/api/guests', { headers });
+    const d = await r.json();
+    setGuests(d.guests || []);
+  }
+  async function loadMatches() {
+    const r = await fetch('/api/match', { headers });
+    const d = await r.json();
+    setProposals(d.proposals || []);
+    setExisting(d.existing || []);
+  }
+  async function loadIntake() {
+    const r = await fetch('/api/voice/intake/sessions', { headers });
+    const d = await r.json();
+    setIntakeSessions(d.sessions || []);
+  }
+
+  useEffect(() => {
+    if (tab === 'hosts') loadHosts();
+    if (tab === 'outreach') { loadHosts(); loadManual(); }
+    if (tab === 'guests') loadGuests();
+    if (tab === 'matches') loadMatches();
+    if (tab === 'intake') loadIntake();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
+  async function runOutreach() {
+    setStatus('Running outreach scheduler...');
+    const r = await fetch('/api/outreach/run', { method: 'POST', headers });
+    const d = await r.json();
+    setStatus(
+      `Processed ${d.processed}: initial=${d.send_initial}, sms2=${d.send_sms_2}, email2=${d.send_email_2}, voice=${d.send_voice}, flagged=${d.flag_manual}, skipped=${d.skipped}`
+    );
+    loadHosts();
+    loadManual();
+  }
+
+  async function markManual(hostId: string, action: 'mark_yes' | 'mark_no' | 'mark_dnc') {
+    await fetch('/api/outreach/manual', {
+      method: 'POST', headers,
+      body: JSON.stringify({ host_id: hostId, action }),
+    });
+    loadManual();
+    loadHosts();
+  }
+
+  async function approveProposals() {
+    setStatus('Saving matches...');
+    const r = await fetch('/api/match', {
+      method: 'POST', headers, body: JSON.stringify({ proposals }),
+    });
+    const d = await r.json();
+    setStatus(`Saved ${d.saved} matches.`);
+    loadMatches();
+  }
+
+  async function notifyAll() {
+    setStatus('Sending match notifications...');
+    const r = await fetch('/api/notify', { method: 'POST', headers });
+    const d = await r.json();
+    setStatus(`Notified ${d.notified} match(es).`);
+    loadMatches();
+  }
+
+  return (
+    <div className="space-y-4">
+      <header className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Coordinator dashboard</h1>
+        <button onClick={onLogout} className="text-sm text-slate-500 hover:text-slate-700">Logout</button>
+      </header>
+
+      <nav className="flex gap-2 border-b border-slate-200">
+        {(['hosts', 'outreach', 'guests', 'intake', 'matches'] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 ${
+              tab === t ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-600'
+            }`}
+          >
+            {t.charAt(0).toUpperCase() + t.slice(1)}
+          </button>
+        ))}
+      </nav>
+
+      {status && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-800 px-3 py-2 rounded text-sm">
+          {status}
+        </div>
+      )}
+
+      {tab === 'hosts' && (
+        <section className="space-y-3">
+          <p className="text-sm text-slate-600">
+            {hosts.length} host(s) total. {hosts.filter((h) => h.confirmed_available === true).length} available, {' '}
+            {hosts.filter((h) => h.confirmed_available === false).length} declined, {' '}
+            {hosts.filter((h) => h.confirmed_available === null).length} awaiting.
+          </p>
+          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <Th>Name</Th><Th>Email</Th><Th>Phone</Th><Th>Capacity</Th><Th>Status</Th><Th>Stage</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {hosts.map((h) => (
+                  <tr key={h.id} className="border-t border-slate-100">
+                    <Td>{h.name}</Td>
+                    <Td className="text-xs">{h.email}</Td>
+                    <Td className="text-xs">{h.phone || '—'}</Td>
+                    <Td>{h.capacity}</Td>
+                    <Td>
+                      {h.confirmed_available === true && <Badge color="green">Available</Badge>}
+                      {h.confirmed_available === false && <Badge color="slate">Declined</Badge>}
+                      {h.confirmed_available === null && <Badge color="amber">Awaiting</Badge>}
+                    </Td>
+                    <Td className="text-xs">{h.outreach_stage || '—'}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {tab === 'outreach' && (
+        <section className="space-y-6">
+          <div className="bg-white border border-slate-200 rounded-lg p-4">
+            <h2 className="text-lg font-semibold mb-2">Sequential outreach</h2>
+            <p className="text-sm text-slate-600 mb-3">
+              The scheduler runs daily via cron. You can also trigger it manually below.
+              Schedule: Day 0 SMS+email → Day 2 SMS reminder → Day 4 email reminder → Day 6 voice call → Day 8 manual flag.
+            </p>
+            <button
+              onClick={runOutreach}
+              className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md font-medium hover:bg-blue-700"
+            >
+              Run outreach now
+            </button>
+          </div>
+
+          <OutreachStats hosts={hosts} />
+
+          <div>
+            <h2 className="text-lg font-semibold mb-2">Hosts requiring manual call ({manualList.length})</h2>
+            <p className="text-xs text-slate-500 mb-3">
+              These hosts didn&apos;t respond to any of the automated channels. Please call them directly.
+            </p>
+            {manualList.length === 0 ? (
+              <p className="text-sm text-slate-500 italic">None right now.</p>
+            ) : (
+              <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <Th>Name</Th><Th>Phone</Th><Th>Email</Th><Th>SMS</Th><Th>Email</Th><Th>Voice</Th><Th>Last call</Th><Th>Actions</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {manualList.map((h) => (
+                      <tr key={h.id} className="border-t border-slate-100">
+                        <Td>{h.name}</Td>
+                        <Td className="text-xs">
+                          {h.phone ? (<a className="text-blue-600 hover:underline" href={`tel:${h.phone}`}>{h.phone}</a>) : '—'}
+                        </Td>
+                        <Td className="text-xs">{h.email}</Td>
+                        <Td>{h.sms_attempts}</Td>
+                        <Td>{h.email_attempts}</Td>
+                        <Td>{h.voice_attempts}</Td>
+                        <Td className="text-xs">{h.voice_call_status || '—'}</Td>
+                        <Td>
+                          <div className="flex gap-1">
+                            <SmallBtn onClick={() => markManual(h.id, 'mark_yes')} color="green">Yes</SmallBtn>
+                            <SmallBtn onClick={() => markManual(h.id, 'mark_no')} color="slate">No</SmallBtn>
+                            <SmallBtn onClick={() => markManual(h.id, 'mark_dnc')} color="red">DNC</SmallBtn>
+                          </div>
+                        </Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {tab === 'guests' && (
+        <section className="space-y-3">
+          <p className="text-sm text-slate-600">{guests.length} guest request(s).</p>
+          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <Th>Name</Th><Th>Email</Th><Th>Arrival</Th><Th>Departure</Th><Th>Party</Th><Th>Notes</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {guests.map((g) => (
+                  <tr key={g.id} className="border-t border-slate-100">
+                    <Td>{g.name}</Td><Td>{g.email}</Td><Td>{g.arrival_date}</Td><Td>{g.departure_date}</Td><Td>{g.party_size}</Td><Td>{g.notes || '—'}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {tab === 'intake' && (
+        <section className="space-y-3">
+          <p className="text-sm text-slate-600">
+            {intakeSessions.length} voice intake session(s). Sessions move through:
+            <span className="text-xs"> started → collecting → sms_sent → completed.</span>
+          </p>
+          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <Th>Caller</Th><Th>Phone</Th><Th>Arrival</Th><Th>Departure</Th><Th>Party</Th><Th>Step</Th><Th>Started</Th><Th>Result</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {intakeSessions.map((s) => (
+                  <tr key={s.id} className="border-t border-slate-100">
+                    <Td>{s.name || <span className="text-slate-400 italic">—</span>}</Td>
+                    <Td className="text-xs">{s.caller_phone || '—'}</Td>
+                    <Td className="text-xs">{s.arrival_date || '—'}</Td>
+                    <Td className="text-xs">{s.departure_date || '—'}</Td>
+                    <Td>{s.party_size ?? '—'}</Td>
+                    <Td className="text-xs">
+                      <Badge color={
+                        s.step === 'completed' ? 'green' :
+                        s.step === 'abandoned' || s.step === 'expired' ? 'red' :
+                        s.step === 'sms_sent' ? 'amber' : 'slate'
+                      }>{s.step.replace(/_/g, ' ')}</Badge>
+                    </Td>
+                    <Td className="text-xs">{new Date(s.call_started_at).toLocaleString()}</Td>
+                    <Td className="text-xs">{s.guest_id ? '✓ Guest created' : '—'}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {intakeSessions.length === 0 && (
+            <p className="text-sm text-slate-500 italic">No voice intake calls yet. Configure the Twilio inbound webhook to point to /api/voice/inbound and try calling your Twilio number.</p>
+          )}
+        </section>
+      )}
+
+      {tab === 'matches' && (
+        <section className="space-y-6">
+          <div>
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-lg font-semibold">Proposed matches ({proposals.length})</h2>
+              <div className="flex gap-2">
+                <button onClick={loadMatches} className="px-3 py-2 text-sm border border-slate-300 rounded-md">Regenerate</button>
+                <button
+                  onClick={approveProposals}
+                  disabled={proposals.length === 0}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md font-medium hover:bg-blue-700 disabled:opacity-50"
+                >Save all proposals</button>
+              </div>
+            </div>
+            {proposals.length === 0 ? (
+              <p className="text-sm text-slate-500 italic">No new matches.</p>
+            ) : (
+              <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr><Th>Host</Th><Th>Guest</Th><Th>Party</Th><Th>Capacity</Th><Th>Arrival</Th><Th>Departure</Th></tr>
+                  </thead>
+                  <tbody>
+                    {proposals.map((p, i) => (
+                      <tr key={i} className="border-t border-slate-100">
+                        <Td>{p.host_name}</Td><Td>{p.guest_name}</Td><Td>{p.party_size}</Td><Td>{p.capacity}</Td><Td>{p.arrival}</Td><Td>{p.departure}</Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-lg font-semibold">Saved matches ({existing.length})</h2>
+              <button onClick={notifyAll} className="px-4 py-2 bg-green-600 text-white text-sm rounded-md font-medium hover:bg-green-700">Notify all proposed matches</button>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50">
+                  <tr><Th>Host</Th><Th>Guest</Th><Th>Status</Th><Th>Host response</Th><Th>Guest response</Th><Th>Exchanged</Th></tr>
+                </thead>
+                <tbody>
+                  {existing.map((m) => {
+                    const host = Array.isArray(m.hosts) ? m.hosts[0] : m.hosts;
+                    const guest = Array.isArray(m.guests) ? m.guests[0] : m.guests;
+                    return (
+                      <tr key={m.id} className="border-t border-slate-100">
+                        <Td>{host?.name}</Td>
+                        <Td>{guest?.name}</Td>
+                        <Td><Badge color={m.status === 'confirmed' ? 'green' : m.status === 'declined' ? 'slate' : 'amber'}>{m.status}</Badge></Td>
+                        <Td>{m.host_response || '—'}</Td>
+                        <Td>{m.guest_response || '—'}</Td>
+                        <Td>{m.contacts_exchanged ? '✓' : '—'}</Td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function OutreachStats({ hosts }: { hosts: any[] }) {
+  const stages = ['pending', 'sent_initial', 'sent_sms_2', 'sent_email_2', 'sent_voice', 'manual_required', 'responded'];
+  const counts = stages.map((s) => ({ stage: s, count: hosts.filter((h) => h.outreach_stage === s).length }));
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-4">
+      <h3 className="text-sm font-semibold text-slate-700 mb-3">Pipeline by stage</h3>
+      <div className="grid grid-cols-7 gap-2">
+        {counts.map((c) => (
+          <div key={c.stage} className="text-center">
+            <div className="text-2xl font-semibold">{c.count}</div>
+            <div className="text-xs text-slate-500 break-words">{c.stage.replace(/_/g, ' ')}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Th({ children }: { children: React.ReactNode }) {
+  return <th className="text-left px-3 py-2 font-medium text-slate-600">{children}</th>;
+}
+function Td({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return <td className={`px-3 py-2 ${className}`}>{children}</td>;
+}
+function Badge({ children, color }: { children: React.ReactNode; color: 'green' | 'amber' | 'slate' | 'red' }) {
+  const classes = {
+    green: 'bg-green-100 text-green-800',
+    amber: 'bg-amber-100 text-amber-800',
+    slate: 'bg-slate-100 text-slate-700',
+    red: 'bg-red-100 text-red-800',
+  }[color];
+  return <span className={`inline-block px-2 py-0.5 text-xs rounded-full ${classes}`}>{children}</span>;
+}
+function SmallBtn({ children, onClick, color }: { children: React.ReactNode; onClick: () => void; color: 'green' | 'slate' | 'red' }) {
+  const classes = {
+    green: 'bg-green-600 hover:bg-green-700 text-white',
+    slate: 'bg-slate-600 hover:bg-slate-700 text-white',
+    red: 'bg-red-600 hover:bg-red-700 text-white',
+  }[color];
+  return (
+    <button onClick={onClick} className={`px-2 py-1 text-xs rounded font-medium ${classes}`}>
+      {children}
+    </button>
+  );
+}
