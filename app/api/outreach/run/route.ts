@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import { decideNextAction, stageAfterAction, OutreachAction } from '@/lib/scheduler';
+import { decideNextAction, MANUAL_REQUIRED_STEP } from '@/lib/scheduler';
+import { OutreachChannel, outreachConfig } from '@/lib/outreach-config';
 import { sendEmail, hostReconfirmEmail } from '@/lib/email';
 import { sendSms, hostReconfirmSms } from '@/lib/sms';
 import { placeReconfirmCall } from '@/lib/voice';
@@ -8,15 +9,14 @@ import { placeReconfirmCall } from '@/lib/voice';
 /**
  * POST /api/outreach/run
  *
- * Auth: either Vercel Cron (x-vercel-cron header) or coordinator bearer token.
+ * Auth: Vercel Cron header, CRON_SECRET, or coordinator bearer token.
  *
- * Picks all hosts who haven't responded and aren't on do_not_contact, decides
- * the next action per the schedule, executes it, and updates the stage.
+ * Reads OUTREACH_STAGE_DELAY_DAYS and OUTREACH_CHANNEL_SEQUENCE env vars
+ * (via lib/outreach-config) to decide who to contact and how.
  *
- * Safe to invoke repeatedly — actions only fire when their delay has elapsed.
+ * Safe to invoke repeatedly — each host advances at most one stage per run.
  */
 export async function POST(req: NextRequest) {
-  // Auth: Vercel Cron uses CRON_SECRET via Authorization: Bearer <secret>
   const authHeader = req.headers.get('authorization') || '';
   const cronSecret = process.env.CRON_SECRET;
   const coordinatorPwd = process.env.COORDINATOR_PASSWORD;
@@ -36,53 +36,80 @@ export async function POST(req: NextRequest) {
     .from('hosts')
     .select('*')
     .is('confirmed_available', null)
-    .eq('do_not_contact', false);
+    .eq('do_not_contact', false)
+    .eq('approval_status', 'approved');
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const summary = {
+  const summary: Record<string, number> = {
     processed: 0,
-    send_initial: 0,
-    send_sms_2: 0,
-    send_email_2: 0,
-    send_voice: 0,
-    flag_manual: 0,
+    sent_sms: 0,
+    sent_email: 0,
+    sent_sms_email: 0,
+    sent_voice: 0,
+    flagged_manual: 0,
     skipped: 0,
     errors: 0,
   };
 
   const now = new Date();
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL!;
 
   for (const host of hosts || []) {
     summary.processed++;
     const action = decideNextAction(host, now);
-    if (action === 'none') {
+
+    if (action.type === 'none') {
       summary.skipped++;
       continue;
     }
 
     try {
-      await executeAction(host, action, siteUrl);
-      summary[action]++;
+      if (action.type === 'flag_manual') {
+        await supabaseAdmin
+          .from('hosts')
+          .update({
+            outreach_step: MANUAL_REQUIRED_STEP,
+            outreach_stage: 'manual_required',
+            last_attempt_channel: 'flagged',
+            last_attempt_at: now.toISOString(),
+          })
+          .eq('id', host.id);
+        summary.flagged_manual++;
+        continue;
+      }
 
-      const newStage = stageAfterAction(action);
+      // type === 'send'
+      const channel = action.channel;
+      const counterKey =
+        channel === 'sms' ? 'sent_sms' :
+        channel === 'email' ? 'sent_email' :
+        channel === 'sms+email' ? 'sent_sms_email' :
+        'sent_voice';
+
+      await executeChannel(channel, host);
+      summary[counterKey]++;
+
       const updates: Record<string, unknown> = {
+        outreach_step: action.nextStep,
         last_attempt_at: now.toISOString(),
-        last_attempt_channel: channelForAction(action),
+        last_attempt_channel: channel,
       };
-      if (newStage) updates.outreach_stage = newStage;
-      if (host.outreach_stage === 'pending') updates.outreach_started_at = now.toISOString();
+      if (host.outreach_step === -1) {
+        updates.outreach_started_at = now.toISOString();
+        updates.outreach_stage = 'sent_initial'; // legacy column, audit only
+      } else {
+        // Map step → legacy stage label for the dashboard and logs
+        updates.outreach_stage = legacyStageLabel(action.nextStep, channel);
+      }
 
-      // Increment per-channel counters
-      if (action === 'send_initial') {
+      // Bump per-channel attempt counters (best-effort audit)
+      if (channel === 'sms' || channel === 'sms+email') {
         updates.sms_attempts = (host.sms_attempts || 0) + (host.phone ? 1 : 0);
+      }
+      if (channel === 'email' || channel === 'sms+email') {
         updates.email_attempts = (host.email_attempts || 0) + 1;
-      } else if (action === 'send_sms_2') {
-        updates.sms_attempts = (host.sms_attempts || 0) + 1;
-      } else if (action === 'send_email_2') {
-        updates.email_attempts = (host.email_attempts || 0) + 1;
-      } else if (action === 'send_voice') {
+      }
+      if (channel === 'voice') {
         updates.voice_attempts = (host.voice_attempts || 0) + 1;
       }
 
@@ -93,81 +120,62 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json(summary);
+  return NextResponse.json({
+    ...summary,
+    config: {
+      delay_days: outreachConfig.delayDays,
+      sequence: outreachConfig.sequence,
+    },
+  });
 }
 
-// Vercel Cron uses GET — accept both methods
+// Vercel Cron uses GET — accept both
 export const GET = POST;
 
-function channelForAction(action: OutreachAction): string {
-  switch (action) {
-    case 'send_initial': return 'sms+email';
-    case 'send_sms_2': return 'sms';
-    case 'send_email_2': return 'email';
-    case 'send_voice': return 'voice';
-    case 'flag_manual': return 'flagged';
-    default: return 'none';
-  }
-}
-
-async function executeAction(host: any, action: OutreachAction, siteUrl: string) {
+async function executeChannel(channel: OutreachChannel, host: any) {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL!;
   const link = `${siteUrl}/host/${host.confirm_token}`;
 
-  if (action === 'send_initial') {
+  if (channel === 'email' || channel === 'sms+email') {
     const { subject, html, text } = hostReconfirmEmail(host);
     await sendEmail({
-      to: host.email, subject, html, text,
-      recipientType: 'host', recipientId: host.id, purpose: 'reconfirm_initial',
+      to: host.email,
+      subject, html, text,
+      recipientType: 'host',
+      recipientId: host.id,
+      purpose: 'reconfirm',
     });
-    if (host.phone) {
-      await sendSms({
-        to: host.phone, body: hostReconfirmSms(host.name, link),
-        recipientType: 'host', recipientId: host.id, purpose: 'reconfirm_initial',
-      });
-    }
-    return;
   }
 
-  if (action === 'send_sms_2') {
-    if (!host.phone) return;
-    const body = `Hi ${host.name}, just a friendly reminder — can you host for the event this year? Please respond here: ${link}`;
+  if ((channel === 'sms' || channel === 'sms+email') && host.phone) {
     await sendSms({
-      to: host.phone, body,
-      recipientType: 'host', recipientId: host.id, purpose: 'reconfirm_sms_2',
+      to: host.phone,
+      body: hostReconfirmSms(host.name, link),
+      recipientType: 'host',
+      recipientId: host.id,
+      purpose: 'reconfirm',
     });
-    return;
   }
 
-  if (action === 'send_email_2') {
-    const eventName = process.env.EVENT_NAME || 'our event';
-    const subject = `${eventName}: Following up — can you host this year?`;
-    const html = `
-      <p>Hi ${host.name},</p>
-      <p>I wanted to follow up gently — we're still trying to confirm hosts for ${eventName} and haven't heard back from you yet.</p>
-      <p>If you're able to host, please click below. If you can't this year, that's totally fine — we just want to remove you from our list so we don't keep bothering you.</p>
-      <p><a href="${link}" style="display:inline-block;padding:12px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Respond here</a></p>
-      <p>Or visit: ${link}</p>
-      <p>Thank you so much!</p>`;
-    await sendEmail({
-      to: host.email, subject, html,
-      recipientType: 'host', recipientId: host.id, purpose: 'reconfirm_email_2',
-    });
-    return;
-  }
-
-  if (action === 'send_voice') {
-    if (!host.phone) return;
+  if (channel === 'voice' && host.phone) {
     await placeReconfirmCall({
       to: host.phone,
       hostId: host.id,
       hostName: host.name,
       confirmToken: host.confirm_token,
     });
-    return;
   }
+}
 
-  if (action === 'flag_manual') {
-    // Nothing to send — just transition stage. The dashboard will surface this host.
-    return;
-  }
+/**
+ * Map (step, channel) back to the legacy stage label used by the dashboard
+ * for backwards-compatible display. Doesn't affect logic.
+ */
+function legacyStageLabel(step: number, channel: OutreachChannel): string {
+  if (step === MANUAL_REQUIRED_STEP) return 'manual_required';
+  if (step === 0) return 'sent_initial';
+  if (channel === 'sms') return 'sent_sms_2';
+  if (channel === 'email') return 'sent_email_2';
+  if (channel === 'voice') return 'sent_voice';
+  return 'sent_initial';
 }

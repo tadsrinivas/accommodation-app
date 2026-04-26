@@ -39,6 +39,7 @@ A web app that matches event guests to volunteer hosts for accommodation. Handle
 4. Open the SQL Editor again and paste `supabase/migration_001_outreach.sql`. Run it. (Adds sequential-outreach columns.)
 5. Open the SQL Editor again and paste `supabase/migration_002_voice_intake.sql`. Run it. (Adds guest voice intake table.)
 6. Open the SQL Editor again and paste `supabase/migration_003_host_approval.sql`. Run it. (Adds host signup approval workflow.)
+7. Open the SQL Editor again and paste `supabase/migration_004_configurable_outreach.sql`. Run it. (Adds outreach step index column.)
 
 ### 3. Resend setup
 
@@ -80,21 +81,53 @@ node scripts/import-hosts.js ./hosts.xlsx
 
 ### 7. Trigger host reconfirmation
 
-The app uses **sequential outreach** (Option D) to contact hosts respectfully:
+The app uses **sequential outreach** to contact hosts respectfully. The schedule and channel order are **configurable** via env vars — no code changes needed.
 
-| Day | Action | Stage transition |
-|-----|--------|------------------|
-| 0 | SMS + email simultaneously | `pending` → `sent_initial` |
-| 2 | SMS reminder | `sent_initial` → `sent_sms_2` |
-| 4 | Email reminder | `sent_sms_2` → `sent_email_2` |
-| 6 | Automated voice call (Twilio TTS, press 1=yes, 2=no) | `sent_email_2` → `sent_voice` |
-| 8 | Flagged for manual call by coordinator | `sent_voice` → `manual_required` |
+**Default schedule** (configurable):
 
-Hosts who respond at any stage drop out of the queue automatically.
+| Step | Days | Channel | Stage label |
+|------|------|---------|-------------|
+| 0 | Day 0 | SMS + email together | `sent_initial` |
+| 1 | Day 2 | SMS reminder | `sent_sms_2` |
+| 2 | Day 4 | Email reminder | `sent_email_2` |
+| 3 | Day 6 | Automated voice call (Twilio TTS) | `sent_voice` |
+| Final | Day 8 | Flagged for manual call | `manual_required` |
+
+Hosts who respond at any step drop out of the queue automatically. If a host has no phone, SMS/voice steps are skipped.
+
+**Configuring the schedule** — in `.env.local`:
+
+```dotenv
+# Days between each stage (default: 2). Range: 1-30.
+OUTREACH_STAGE_DELAY_DAYS=2
+
+# Comma-separated channel sequence. Allowed: sms, email, sms+email, voice
+OUTREACH_CHANNEL_SEQUENCE=sms+email,sms,email,voice
+```
+
+**Common alternative configurations:**
+
+```dotenv
+# Skip voice calls — gentler, no robocall reputation risk
+OUTREACH_CHANNEL_SEQUENCE=sms+email,sms,email
+
+# Email-first, slow pace (3 days between stages)
+OUTREACH_STAGE_DELAY_DAYS=3
+OUTREACH_CHANNEL_SEQUENCE=email,sms,email,voice
+
+# Aggressive — 1 day between stages, voice call early
+OUTREACH_STAGE_DELAY_DAYS=1
+OUTREACH_CHANNEL_SEQUENCE=sms+email,voice,email,sms
+
+# Email-only, three reminders
+OUTREACH_CHANNEL_SEQUENCE=email,email,email
+```
+
+**After changing env vars:** stop and restart the dev server (`Ctrl+C` then `npm run dev`). On Vercel, redeploy or restart the function. The active configuration is shown in the coordinator dashboard's Outreach tab so you can verify what's running.
 
 **Trigger options:**
-- **Manual:** From the coordinator dashboard → Outreach tab → "Run outreach now". Process whatever is due right now.
-- **Automatic:** Vercel Cron runs `/api/outreach/run` daily at 14:00 UTC (configured in `vercel.json`). Each run processes all hosts whose next stage is due.
+- **Manual:** Coordinator dashboard → Outreach tab → "Run outreach now"
+- **Automatic:** Vercel Cron runs `/api/outreach/run` daily at 14:00 UTC (in `vercel.json`)
 
 The voice call uses Twilio Programmable Voice with text-to-speech. The host hears: *"Hi [Name], this is the accommodation team for [Event]. To confirm yes, press 1. To decline, press 2. To repeat, press 9."* Voicemail detection leaves a short message instead of the menu.
 
