@@ -26,13 +26,15 @@ export async function generateMatches(): Promise<MatchProposal[]> {
     .from('hosts')
     .select('id, name, capacity')
     .eq('confirmed_available', true)
-    .eq('approval_status', 'approved');
+    .eq('approval_status', 'approved')
+    .is('cancelled_at', null);
 
   if (hostErr) throw hostErr;
 
   const { data: guests, error: guestErr } = await supabaseAdmin
     .from('guests')
     .select('id, name, party_size, arrival_date, departure_date')
+    .is('cancelled_at', null)
     .order('party_size', { ascending: false });
 
   if (guestErr) throw guestErr;

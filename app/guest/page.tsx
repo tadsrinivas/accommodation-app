@@ -1,40 +1,47 @@
 'use client';
 
 import { useState } from 'react';
+import { VerifyGate } from '@/components/VerifyGate';
 
 export default function GuestFormPage() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  // Mirror the form fields into state so VerifyGate can see email/phone
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [arrival, setArrival] = useState('');
+  const [departure, setDeparture] = useState('');
+  const [partySize, setPartySize] = useState(1);
+  const [notes, setNotes] = useState('');
+  const [verified, setVerified] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (!verified) {
+      setError('Please verify your email or phone first.');
+      return;
+    }
+
     setLoading(true);
-
-    const formData = new FormData(e.currentTarget);
-    const body = {
-      name: formData.get('name'),
-      email: formData.get('email'),
-      phone: formData.get('phone'),
-      arrival_date: formData.get('arrival_date'),
-      departure_date: formData.get('departure_date'),
-      party_size: Number(formData.get('party_size')),
-      notes: formData.get('notes'),
-    };
-
     const res = await fetch('/api/guests', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        name, email, phone,
+        arrival_date: arrival,
+        departure_date: departure,
+        party_size: partySize,
+        notes,
+      }),
     });
     const data = await res.json();
     setLoading(false);
-
-    if (!res.ok) {
-      setError(data.error || 'Submission failed');
-      return;
-    }
+    if (!res.ok) { setError(data.error || 'Submission failed'); return; }
     setSubmitted(true);
   }
 
@@ -57,32 +64,50 @@ export default function GuestFormPage() {
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <Field label="Your name" name="name" required />
-        <Field label="Email" name="email" type="email" required />
-        <Field label="Phone (optional)" name="phone" type="tel" />
+        <Field label="Your name" value={name} onChange={setName} required />
+        <Field label="Email" type="email" value={email} onChange={(v) => { setEmail(v); setVerified(false); }} required />
+        <Field label="Phone (optional)" type="tel" value={phone} onChange={(v) => { setPhone(v); setVerified(false); }} />
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Arrival date" name="arrival_date" type="date" required />
-          <Field label="Departure date" name="departure_date" type="date" required />
+          <Field label="Arrival date" type="date" value={arrival} onChange={setArrival} required />
+          <Field label="Departure date" type="date" value={departure} onChange={setDeparture} required />
         </div>
 
-        <Field label="Number of people" name="party_size" type="number" min={1} max={20} defaultValue="1" required />
+        <div>
+          <label className="block text-sm font-medium mb-1">Number of people</label>
+          <input
+            type="number" min={1} max={20}
+            value={partySize}
+            onChange={(e) => setPartySize(Number(e.target.value))}
+            className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
+            required
+          />
+        </div>
 
         <div>
           <label className="block text-sm font-medium mb-1">Notes (optional)</label>
           <textarea
-            name="notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
             rows={3}
             className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
             placeholder="Anything we should know?"
           />
         </div>
 
+        <VerifyGate
+          email={email}
+          phone={phone}
+          intent="guest_form"
+          verified={verified}
+          onVerified={() => setVerified(true)}
+        />
+
         {error && <p className="text-sm text-red-600">{error}</p>}
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || !verified}
           className="w-full py-2 bg-blue-600 text-white rounded-md font-medium hover:bg-blue-700 disabled:opacity-50"
         >
           {loading ? 'Submitting...' : 'Submit request'}
@@ -92,13 +117,13 @@ export default function GuestFormPage() {
   );
 }
 
-function Field(props: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
-  const { label, ...rest } = props;
+function Field({ label, value, onChange, type = 'text', required }: { label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean }) {
   return (
     <div>
       <label className="block text-sm font-medium mb-1">{label}</label>
       <input
-        {...rest}
+        type={type} value={value} required={required}
+        onChange={(e) => onChange(e.target.value)}
         className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
       />
     </div>
