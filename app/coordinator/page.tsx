@@ -114,16 +114,16 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
     else { const d = await res.json(); setStatus(`Reject failed: ${d.error}`); }
   }
 
-  async function runOutreach() {
-    setStatus('Running outreach scheduler...');
-    const r = await fetch('/api/outreach/run', { method: 'POST', headers });
-    const d = await r.json();
-    setStatus(
-      `Processed ${d.processed}: initial=${d.send_initial}, sms2=${d.send_sms_2}, email2=${d.send_email_2}, voice=${d.send_voice}, flagged=${d.flag_manual}, skipped=${d.skipped}`
-    );
-    loadHosts();
-    loadManual();
-  }
+ async function runOutreach() {
+  setStatus('Running outreach scheduler...');
+  const r = await fetch('/api/outreach/run', { method: 'POST', headers });
+  const d = await r.json();
+  setStatus(
+    `Processed ${d.processed}: sms+email=${d.sent_sms_email ?? 0}, sms=${d.sent_sms ?? 0}, email=${d.sent_email ?? 0}, voice=${d.sent_voice ?? 0}, flagged=${d.flagged_manual ?? 0}, skipped=${d.skipped ?? 0}, errors=${d.errors ?? 0}`
+  );
+  loadHosts();
+  loadManual();
+}
 
   async function markManual(hostId: string, action: 'mark_yes' | 'mark_no' | 'mark_dnc') {
     await fetch('/api/outreach/manual', {
