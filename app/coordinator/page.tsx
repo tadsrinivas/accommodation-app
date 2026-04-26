@@ -41,6 +41,7 @@ export default function CoordinatorPage() {
 function Dashboard({ token, onLogout }: { token: string; onLogout: () => void }) {
   const [tab, setTab] = useState<'hosts' | 'outreach' | 'guests' | 'matches' | 'intake'>('hosts');
   const [hosts, setHosts] = useState<any[]>([]);
+  const [pending, setPending] = useState<any[]>([]);
   const [manualList, setManualList] = useState<any[]>([]);
   const [guests, setGuests] = useState<any[]>([]);
   const [proposals, setProposals] = useState<any[]>([]);
@@ -55,6 +56,12 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
     if (r.status === 401) { onLogout(); return; }
     const d = await r.json();
     setHosts(d.hosts || []);
+  }
+  async function loadPending() {
+    const r = await fetch('/api/hosts/approve', { headers });
+    if (r.status === 401) { onLogout(); return; }
+    const d = await r.json();
+    setPending(d.hosts || []);
   }
   async function loadManual() {
     const r = await fetch('/api/outreach/manual', { headers });
@@ -79,13 +86,33 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
   }
 
   useEffect(() => {
-    if (tab === 'hosts') loadHosts();
+    if (tab === 'hosts') { loadHosts(); loadPending(); }
     if (tab === 'outreach') { loadHosts(); loadManual(); }
     if (tab === 'guests') loadGuests();
     if (tab === 'matches') loadMatches();
     if (tab === 'intake') loadIntake();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
+
+  async function approveHost(hostId: string) {
+    const res = await fetch('/api/hosts/approve', {
+      method: 'POST', headers,
+      body: JSON.stringify({ host_id: hostId, action: 'approve' }),
+    });
+    if (res.ok) { setStatus('Host approved.'); loadPending(); loadHosts(); }
+    else { const d = await res.json(); setStatus(`Approve failed: ${d.error}`); }
+  }
+
+  async function rejectHost(hostId: string) {
+    const note = window.prompt('Optional rejection note (visible in their email). Leave blank for the default polite message:') || undefined;
+    if (note === null) return;
+    const res = await fetch('/api/hosts/approve', {
+      method: 'POST', headers,
+      body: JSON.stringify({ host_id: hostId, action: 'reject', note }),
+    });
+    if (res.ok) { setStatus('Host rejected.'); loadPending(); loadHosts(); }
+    else { const d = await res.json(); setStatus(`Reject failed: ${d.error}`); }
+  }
 
   async function runOutreach() {
     setStatus('Running outreach scheduler...');
@@ -153,36 +180,80 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
       )}
 
       {tab === 'hosts' && (
-        <section className="space-y-3">
-          <p className="text-sm text-slate-600">
-            {hosts.length} host(s) total. {hosts.filter((h) => h.confirmed_available === true).length} available, {' '}
-            {hosts.filter((h) => h.confirmed_available === false).length} declined, {' '}
-            {hosts.filter((h) => h.confirmed_available === null).length} awaiting.
-          </p>
-          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <Th>Name</Th><Th>Email</Th><Th>Phone</Th><Th>Capacity</Th><Th>Status</Th><Th>Stage</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {hosts.map((h) => (
-                  <tr key={h.id} className="border-t border-slate-100">
-                    <Td>{h.name}</Td>
-                    <Td className="text-xs">{h.email}</Td>
-                    <Td className="text-xs">{h.phone || '—'}</Td>
-                    <Td>{h.capacity}</Td>
-                    <Td>
-                      {h.confirmed_available === true && <Badge color="green">Available</Badge>}
-                      {h.confirmed_available === false && <Badge color="slate">Declined</Badge>}
-                      {h.confirmed_available === null && <Badge color="amber">Awaiting</Badge>}
-                    </Td>
-                    <Td className="text-xs">{h.outreach_stage || '—'}</Td>
+        <section className="space-y-4">
+          {pending.length > 0 && (
+            <div>
+              <h2 className="text-lg font-semibold mb-2">
+                Pending approvals <Badge color="amber">{pending.length}</Badge>
+              </h2>
+              <div className="bg-white border border-amber-200 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-amber-50">
+                    <tr>
+                      <Th>Name</Th><Th>Email</Th><Th>Phone</Th><Th>Cap</Th><Th>Address</Th><Th>Notes</Th><Th>Submitted</Th><Th>Actions</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pending.map((h) => (
+                      <tr key={h.id} className="border-t border-amber-100">
+                        <Td>{h.name}</Td>
+                        <Td className="text-xs">{h.email}</Td>
+                        <Td className="text-xs">{h.phone || '—'}</Td>
+                        <Td>{h.capacity}</Td>
+                        <Td className="text-xs">{h.address || '—'}</Td>
+                        <Td className="text-xs">{h.notes || '—'}</Td>
+                        <Td className="text-xs">{h.submitted_at ? new Date(h.submitted_at).toLocaleDateString() : '—'}</Td>
+                        <Td>
+                          <div className="flex gap-1">
+                            <SmallBtn onClick={() => approveHost(h.id)} color="green">Approve</SmallBtn>
+                            <SmallBtn onClick={() => rejectHost(h.id)} color="red">Reject</SmallBtn>
+                          </div>
+                        </Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <h2 className="text-lg font-semibold mb-2">All hosts</h2>
+            <p className="text-sm text-slate-600 mb-2">
+              {hosts.length} host(s) total. {hosts.filter((h) => h.confirmed_available === true).length} available, {' '}
+              {hosts.filter((h) => h.confirmed_available === false).length} declined, {' '}
+              {hosts.filter((h) => h.confirmed_available === null).length} awaiting.
+            </p>
+            <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <Th>Name</Th><Th>Email</Th><Th>Phone</Th><Th>Capacity</Th><Th>Status</Th><Th>Approval</Th><Th>Source</Th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {hosts.map((h) => (
+                    <tr key={h.id} className="border-t border-slate-100">
+                      <Td>{h.name}</Td>
+                      <Td className="text-xs">{h.email}</Td>
+                      <Td className="text-xs">{h.phone || '—'}</Td>
+                      <Td>{h.capacity}</Td>
+                      <Td>
+                        {h.confirmed_available === true && <Badge color="green">Available</Badge>}
+                        {h.confirmed_available === false && <Badge color="slate">Declined</Badge>}
+                        {h.confirmed_available === null && <Badge color="amber">Awaiting</Badge>}
+                      </Td>
+                      <Td className="text-xs">
+                        {h.approval_status === 'pending' && <Badge color="amber">Pending</Badge>}
+                        {h.approval_status === 'approved' && <Badge color="green">Approved</Badge>}
+                        {h.approval_status === 'rejected' && <Badge color="red">Rejected</Badge>}
+                      </Td>
+                      <Td className="text-xs">{h.source || 'imported'}</Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       )}

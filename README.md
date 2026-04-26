@@ -38,6 +38,7 @@ A web app that matches event guests to volunteer hosts for accommodation. Handle
 3. Open the SQL Editor again and paste `supabase/policies.sql`. Run it.
 4. Open the SQL Editor again and paste `supabase/migration_001_outreach.sql`. Run it. (Adds sequential-outreach columns.)
 5. Open the SQL Editor again and paste `supabase/migration_002_voice_intake.sql`. Run it. (Adds guest voice intake table.)
+6. Open the SQL Editor again and paste `supabase/migration_003_host_approval.sql`. Run it. (Adds host signup approval workflow.)
 
 ### 3. Resend setup
 
@@ -143,10 +144,34 @@ After deploy, update `NEXT_PUBLIC_SITE_URL` in Vercel env to your production URL
 
 ## URLs
 
-- `/` — landing page
-- `/guest` — public guest intake form (share this link with guests)
-- `/host/[token]` — host confirmation page (unique per host, sent via email/SMS)
-- `/coordinator` — your admin dashboard (password-protected)
+- `/` — landing page (3 cards: guest request, host signup, coordinator)
+- `/guest` — public guest intake form (share with guests)
+- `/host/signup` — public host signup form (share with potential hosts)
+- `/host/[token]` — host reconfirmation (yes/no + capacity) — sent via email/SMS
+- `/host/[token]/edit` — host self-service profile editor (full details)
+- `/intake/[token]` — voice-call follow-up form for guests (sent via SMS after their call)
+- `/coordinator` — admin dashboard (password-protected)
+
+## Host signup approval workflow
+
+When a new host fills `/host/signup`:
+
+1. They get an immediate email: *"Thanks, a coordinator will review and confirm shortly."*
+2. The coordinator (you) get an alert email at `COORDINATOR_EMAIL` with a link to the dashboard.
+3. The host appears in the **Pending approvals** section at the top of the Hosts tab.
+4. You click **Approve** or **Reject**:
+   - **Approve** → host is confirmed available and gets a "you're in!" email with their profile management link
+   - **Reject** → host gets a polite "thank you for offering, but..." email; you can optionally add a custom note
+
+Only `approved` hosts are considered by the matching algorithm. Hosts imported from Excel default to `approved` automatically.
+
+**Spam protection on the public form:**
+- Hidden honeypot field (legit users won't fill it; bots will)
+- Disposable email domain blocklist (mailinator, tempmail, etc.)
+- Duplicate-email rejection (can't sign up twice with same email)
+- 30-guest capacity cap
+
+To configure the coordinator alert email, add `COORDINATOR_EMAIL=you@yourdomain.com` to your `.env.local`.
 
 ## Coordinator access
 

@@ -7,6 +7,7 @@ import { NextRequest } from 'next/server';
  */
 export function requireCoordinator(req: NextRequest): { ok: boolean; error?: string } {
   const password = process.env.COORDINATOR_PASSWORD;
+  console.log('Server password length:', password?.length, 'starts with:', password?.slice(0, 3));
   if (!password) return { ok: false, error: 'COORDINATOR_PASSWORD not set' };
 
   const header = req.headers.get('authorization') || '';

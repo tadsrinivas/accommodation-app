@@ -146,3 +146,78 @@ export function contactsExchangedEmail(args: {
     text: `Your ${roleLabel}: ${args.otherPartyName}, ${args.otherPartyEmail}${args.otherPartyPhone ? ', ' + args.otherPartyPhone : ''}`,
   };
 }
+
+// ============================================================
+// Host signup approval workflow
+// ============================================================
+
+export function hostSignupReceivedEmail(host: { name: string }) {
+  return {
+    subject: `${eventName()}: Thanks for offering to host`,
+    html: `
+      <p>Hi ${host.name},</p>
+      <p>Thank you so much for offering to host accommodation for <strong>${eventName()}</strong>!</p>
+      <p>We've received your details and a coordinator will review them within a day or two. You'll get another email once you're confirmed in our host pool.</p>
+      <p>If you have questions, just reply to this email.</p>
+    `,
+    text: `Hi ${host.name}, thanks for offering to host for ${eventName()}. A coordinator will review your details and get back to you shortly.`,
+  };
+}
+
+export function hostSignupCoordinatorAlertEmail(args: {
+  hostName: string;
+  hostEmail: string;
+  hostPhone: string | null;
+  capacity: number;
+  address: string | null;
+  notes: string | null;
+}) {
+  const link = `${siteUrl()}/coordinator`;
+  return {
+    subject: `New host signup: ${args.hostName}`,
+    html: `
+      <p>A new host has signed up and is awaiting your approval:</p>
+      <ul>
+        <li><strong>Name:</strong> ${args.hostName}</li>
+        <li><strong>Email:</strong> ${args.hostEmail}</li>
+        <li><strong>Phone:</strong> ${args.hostPhone || '—'}</li>
+        <li><strong>Capacity:</strong> ${args.capacity}</li>
+        <li><strong>Address:</strong> ${args.address || '—'}</li>
+        <li><strong>Notes:</strong> ${args.notes || '—'}</li>
+      </ul>
+      <p><a href="${link}" style="display:inline-block;padding:10px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Review in dashboard</a></p>
+    `,
+    text: `New host signup: ${args.hostName} (${args.hostEmail}, capacity ${args.capacity}). Review at ${link}`,
+  };
+}
+
+export function hostApprovedEmail(host: { name: string; confirm_token: string }) {
+  const editLink = `${siteUrl()}/host/${host.confirm_token}/edit`;
+  return {
+    subject: `${eventName()}: You're confirmed as a host!`,
+    html: `
+      <p>Hi ${host.name},</p>
+      <p>Great news — you're now confirmed in our host pool for <strong>${eventName()}</strong>. Thank you so much for volunteering!</p>
+      <p>When we have a guest match for you, you'll get an email asking you to accept or decline. You can also update your details (capacity, address, notes) anytime here:</p>
+      <p><a href="${editLink}" style="display:inline-block;padding:10px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Manage my hosting profile</a></p>
+      <p>Or copy this link: ${editLink}</p>
+    `,
+    text: `Hi ${host.name}, you're confirmed as a host for ${eventName()}. Manage your profile: ${editLink}`,
+  };
+}
+
+export function hostRejectedEmail(host: { name: string }, note?: string) {
+  const noteBlock = note
+    ? `<p>${note}</p>`
+    : `<p>We've already filled our host pool for this year, but we'll keep your details on file for future events. We really appreciate the offer.</p>`;
+  return {
+    subject: `${eventName()}: Thank you for your offer to host`,
+    html: `
+      <p>Hi ${host.name},</p>
+      <p>Thank you so much for offering to host accommodation for <strong>${eventName()}</strong>.</p>
+      ${noteBlock}
+      <p>We genuinely appreciate your generosity.</p>
+    `,
+    text: `Hi ${host.name}, thank you for offering to host for ${eventName()}. ${note || "We've filled our host pool for this year but appreciate the offer."}`,
+  };
+}

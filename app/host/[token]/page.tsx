@@ -61,10 +61,15 @@ export default function HostConfirmPage() {
 
   if (submitted === 'yes') {
     return (
-      <div className="max-w-lg mx-auto bg-white rounded-lg border border-green-200 bg-green-50 p-8 mt-12 text-center">
-        <h1 className="text-xl font-semibold mb-2">Thank you, {host?.name}!</h1>
+      <div className="max-w-lg mx-auto bg-white rounded-lg border border-green-200 bg-green-50 p-8 mt-12 text-center space-y-3">
+        <h1 className="text-xl font-semibold">Thank you, {host?.name}!</h1>
         <p className="text-slate-700 text-sm">
           We&apos;ve confirmed you can host up to {capacity} guest{capacity === 1 ? '' : 's'}. We&apos;ll be in touch when we have a match.
+        </p>
+        <p className="text-sm">
+          <a href={`/host/${token}/edit`} className="text-blue-600 hover:underline">
+            Update your full profile (address, notes, etc.)
+          </a>
         </p>
       </div>
     );

@@ -25,7 +25,8 @@ export async function generateMatches(): Promise<MatchProposal[]> {
   const { data: hosts, error: hostErr } = await supabaseAdmin
     .from('hosts')
     .select('id, name, capacity')
-    .eq('confirmed_available', true);
+    .eq('confirmed_available', true)
+    .eq('approval_status', 'approved');
 
   if (hostErr) throw hostErr;
 
