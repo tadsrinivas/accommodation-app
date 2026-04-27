@@ -18,6 +18,7 @@ export async function sendEmail(args: SendEmailArgs) {
     const result = await resend.emails.send({
       from: process.env.EMAIL_FROM!,
       to: args.to,
+      replyTo: 'info@harilimos.com',
       subject: args.subject,
       html: args.html,
       text: args.text,
