@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { escapeXml, parseMMDD, speakableDate } from '@/lib/voice-intake';
+import { say, safeSay } from '@/lib/voice-prompts';
 
 export async function POST(req: NextRequest) {
   const url = new URL(req.url);
@@ -10,15 +11,14 @@ export async function POST(req: NextRequest) {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL!;
 
   const iso = parseMMDD(digits);
-
   if (!iso) {
     const retryUrl = `${siteUrl}/api/voice/intake/arrival?call_sid=${encodeURIComponent(callSid)}`;
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Gather numDigits="4" action="${escapeXml(retryUrl)}" method="POST" timeout="10" finishOnKey="">
-    <Say voice="Polly.Joanna">That doesn't look like a valid date. Please enter four digits: two for the month, two for the day. For October 5th, enter one, zero, zero, five.</Say>
+    ${say(`I'm sorry, that wasn't a valid date. Please enter four digits, month then day. For example, October fifth would be one, zero, zero, five.`)}
   </Gather>
-  <Say voice="Polly.Joanna">Goodbye.</Say>
+  ${say(`Thank you, goodbye.`)}
   <Hangup/>
 </Response>`;
     return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });
@@ -31,11 +31,11 @@ export async function POST(req: NextRequest) {
   const departureUrl = `${siteUrl}/api/voice/intake/departure?call_sid=${encodeURIComponent(callSid)}`;
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna">Got it, ${escapeXml(speakableDate(iso))}.</Say>
+  ${safeSay(`Perfect, ${speakableDate(iso)}.`)}
   <Gather numDigits="4" action="${escapeXml(departureUrl)}" method="POST" timeout="10" finishOnKey="">
-    <Say voice="Polly.Joanna">Now please enter your departure date the same way, four digits.</Say>
+    ${say(`Now please enter your departure date the same way, four digits.`)}
   </Gather>
-  <Say voice="Polly.Joanna">Goodbye.</Say>
+  ${say(`Thank you, goodbye.`)}
   <Hangup/>
 </Response>`;
   return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });

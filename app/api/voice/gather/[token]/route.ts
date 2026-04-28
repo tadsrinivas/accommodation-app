@@ -1,25 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-
-// Twilio POSTs the gathered digits here. We update the host record
-// and respond with TwiML to confirm verbally.
+import { escapeXml } from '@/lib/voice-intake';
+import { say } from '@/lib/voice-prompts';
 
 export async function POST(req: NextRequest, { params }: { params: { token: string } }) {
   const formData = await req.formData();
   const digits = String(formData.get('Digits') || '');
 
-  const eventName = process.env.EVENT_NAME || 'our event';
   let confirmedAvailable: boolean | null = null;
   let response: string;
 
   if (digits === '1') {
     confirmedAvailable = true;
-    response = `Thank you so much. We've recorded that you can host this year. We'll be in touch with details. Goodbye.`;
+    response = `Wonderful, thank you so much. I've recorded that you can host this year, and we'll be in touch with details soon. Have a lovely day, goodbye.`;
   } else if (digits === '2') {
     confirmedAvailable = false;
-    response = `Thank you for letting us know. We appreciate your past help. Goodbye.`;
+    response = `Thank you for letting us know. We really appreciate your past help, and hope to see you next year. Goodbye.`;
   } else if (digits === '9') {
-    // Repeat — re-issue the gather TwiML
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL!;
     const twimlUrl = `${siteUrl}/api/voice/twiml/${params.token}`;
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -28,7 +25,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
 </Response>`;
     return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });
   } else {
-    response = `We didn't recognize that input. We'll follow up by email. Thank you.`;
+    response = `I didn't recognise that input. We'll follow up by email. Thank you, goodbye.`;
   }
 
   if (confirmedAvailable !== null) {
@@ -49,17 +46,8 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
 
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna">${escapeXml(response)}</Say>
+  ${say(response)}
   <Hangup/>
 </Response>`;
   return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });
-}
-
-function escapeXml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
 }

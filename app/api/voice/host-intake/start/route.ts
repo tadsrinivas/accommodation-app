@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendSms } from '@/lib/sms';
-import { escapeXml } from '@/lib/voice-intake';
+import { say } from '@/lib/voice-prompts';
 
-/**
- * "New host" voice flow.
- * Email and capacity are awkward to capture by voice, and signups need
- * coordinator approval anyway. So we send an SMS link to /host/signup.
- */
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
   const fromNumber = String(formData.get('From') || '');
@@ -15,7 +10,7 @@ export async function POST(req: NextRequest) {
   if (!fromNumber) {
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna">We couldn't read your phone number. Please visit our website to sign up. Goodbye.</Say>
+  ${say(`I'm sorry, I wasn't able to read your phone number. Please visit our website to sign up. Thank you.`)}
   <Hangup/>
 </Response>`;
     return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });
@@ -32,7 +27,7 @@ export async function POST(req: NextRequest) {
 
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna">Thank you for offering to host. We just texted you a link to complete your signup. After you submit, a coordinator will review and approve. Goodbye.</Say>
+  ${say(`Thank you so much for offering to host. I've just sent you a text message with a link to complete your signup. Once you submit, a coordinator will review and confirm. We really appreciate your generosity. Thank you, and goodbye.`)}
   <Hangup/>
 </Response>`;
   return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });

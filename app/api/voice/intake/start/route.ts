@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { escapeXml } from '@/lib/voice-intake';
+import { say } from '@/lib/voice-prompts';
 
-/**
- * Entry to the existing guest intake flow. Sets up the session, then
- * delegates to /api/voice/intake/name (which already exists) by asking for the name.
- */
 export async function POST(req: NextRequest) {
   const url = new URL(req.url);
   const callSid = url.searchParams.get('call_sid') || '';
@@ -27,10 +24,12 @@ export async function POST(req: NextRequest) {
 
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Gather input="speech" action="${escapeXml(nameAction)}" method="POST" speechTimeout="auto" timeout="6" language="en-US">
-    <Say voice="Polly.Joanna">Great. Please say your full name after the tone.</Say>
+  ${say(`Thank you. I'll just need a few details from you, and the whole thing will take less than a minute.`)}
+  <Pause length="1"/>
+  <Gather input="speech" action="${escapeXml(nameAction)}" method="POST" speechTimeout="auto" timeout="6" language="en-IN">
+    ${say(`First, please tell me your full name after the tone.`)}
   </Gather>
-  <Say voice="Polly.Joanna">No response. Goodbye.</Say>
+  ${say(`I didn't hear anything. Please call back when you're ready. Thank you.`)}
   <Hangup/>
 </Response>`;
   return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });

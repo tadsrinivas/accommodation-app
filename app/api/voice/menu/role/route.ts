@@ -1,15 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { escapeXml } from '@/lib/voice-intake';
+import { say } from '@/lib/voice-prompts';
 import { supabaseAdmin } from '@/lib/supabase';
-
-/**
- * After top-level role selection (guest/host), present:
- *   1: New
- *   2: Modify
- *   3: Cancel
- *
- * The role is passed forward via the action URL query string.
- */
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
@@ -21,7 +13,7 @@ export async function POST(req: NextRequest) {
   if (digit !== '1' && digit !== '2') {
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna">Sorry, that wasn't a valid choice. Goodbye.</Say>
+  ${say(`I'm sorry, that wasn't one of the options. Please call again. Thank you.`)}
   <Hangup/>
 </Response>`;
     return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });
@@ -29,7 +21,6 @@ export async function POST(req: NextRequest) {
 
   const role = digit === '1' ? 'guest' : 'host';
 
-  // Persist role + caller phone for the rest of the call
   if (callSid) {
     await supabaseAdmin
       .from('guest_intake_sessions')
@@ -42,13 +33,18 @@ export async function POST(req: NextRequest) {
 
   const action = `${siteUrl}/api/voice/menu/intent?role=${role}&call_sid=${encodeURIComponent(callSid)}`;
   const roleWord = role === 'guest' ? 'guest' : 'host';
+  const intro = role === 'guest'
+    ? `Wonderful, let's help you find a place to stay.`
+    : `Thank you so much for offering to host.`;
 
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
+  ${say(intro)}
+  <Pause length="1"/>
   <Gather numDigits="1" action="${escapeXml(action)}" method="POST" timeout="6">
-    <Say voice="Polly.Joanna">As a ${roleWord}, press 1 for a new request, 2 to modify an existing request, or 3 to cancel an existing request.</Say>
+    ${say(`As a ${roleWord}, please press one to make a new request, two to update your existing request, or three to cancel.`)}
   </Gather>
-  <Say voice="Polly.Joanna">No response. Goodbye.</Say>
+  ${say(`I didn't catch that. Please try calling again. Thank you.`)}
   <Hangup/>
 </Response>`;
   return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });

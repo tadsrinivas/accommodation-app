@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { escapeXml } from '@/lib/voice-intake';
+import { say, safeSay } from '@/lib/voice-prompts';
 import { sendSms } from '@/lib/sms';
 
 export async function POST(req: NextRequest) {
@@ -17,15 +18,14 @@ export async function POST(req: NextRequest) {
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Gather numDigits="2" action="${escapeXml(retryUrl)}" method="POST" timeout="8" finishOnKey="#">
-    <Say voice="Polly.Joanna">Please enter a number between 1 and 20, then press the pound key.</Say>
+    ${say(`Please enter a number between one and twenty, then press the pound key.`)}
   </Gather>
-  <Say voice="Polly.Joanna">Goodbye.</Say>
+  ${say(`Thank you, goodbye.`)}
   <Hangup/>
 </Response>`;
     return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });
   }
 
-  // Persist + advance to sms_sent. Fetch session for the SMS link.
   const { data: session } = await supabaseAdmin
     .from('guest_intake_sessions')
     .update({
@@ -40,13 +40,12 @@ export async function POST(req: NextRequest) {
   if (!session) {
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna">Sorry, something went wrong on our end. Please try calling back. Goodbye.</Say>
+  ${say(`I'm sorry, something went wrong on our end. Please try calling back. Thank you.`)}
   <Hangup/>
 </Response>`;
     return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });
   }
 
-  // Send SMS with the completion link
   const completionLink = `${siteUrl}/intake/${session.confirm_token}`;
   let smsOk = false;
 
@@ -62,14 +61,13 @@ export async function POST(req: NextRequest) {
     smsOk = smsRes.ok;
   }
 
-  // Read out the link as a URL is not practical — instead tell them to check texts
   const closingMsg = smsOk
-    ? `Perfect. I've recorded your group size as ${partySize}. To finish your request, please check the text message we just sent to your phone. It contains a short link to confirm everything and add your email address. Thank you for calling.`
-    : `Perfect. I've recorded your group size as ${partySize}. Unfortunately I wasn't able to send a follow-up text to this number. Please visit our website to complete your request. Thank you for calling.`;
+    ? `Wonderful. I've recorded your group size as ${partySize}. To complete your request, please check the text message I just sent. It has a link where you can confirm everything and add your email. Thank you so much for calling.`
+    : `I've recorded your group size as ${partySize}. I wasn't able to send a follow-up text to this number, so please visit our website to finish. Thank you for calling.`;
 
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna">${escapeXml(closingMsg)}</Say>
+  ${safeSay(closingMsg)}
   <Hangup/>
 </Response>`;
   return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });

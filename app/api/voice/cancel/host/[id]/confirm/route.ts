@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { sendSms } from '@/lib/sms';
+import { say } from '@/lib/voice-prompts';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const formData = await req.formData();
@@ -9,7 +10,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (digit !== '9') {
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna">Your record was not changed. Thank you, goodbye.</Say>
+  ${say(`Your record has not been changed. Thank you, goodbye.`)}
   <Hangup/>
 </Response>`;
     return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!host) {
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna">Record was already cancelled or could not be found. Goodbye.</Say>
+  ${say(`Your record has already been cancelled, or we couldn't find it. Thank you, goodbye.`)}
   <Hangup/>
 </Response>`;
     return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });
@@ -36,11 +37,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .update({
       cancelled_at: new Date().toISOString(),
       cancellation_source: 'voice',
-      confirmed_available: false,  // also flag as not available so they're excluded from matching
+      confirmed_available: false,
     })
     .eq('id', host.id);
 
-  // Cancel any non-terminal matches involving this host
   await supabaseAdmin
     .from('matches')
     .update({ status: 'cancelled' })
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna">You've been removed from the host pool. We've sent a confirmation text. Thank you for your past help, goodbye.</Say>
+  ${say(`You've been removed from the host pool. I've sent you a confirmation text message. Thank you so much for your generosity. Goodbye.`)}
   <Hangup/>
 </Response>`;
   return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });

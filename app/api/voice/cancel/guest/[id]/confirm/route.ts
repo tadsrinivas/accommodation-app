@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { sendSms } from '@/lib/sms';
-import { escapeXml } from '@/lib/voice-intake';
+import { say } from '@/lib/voice-prompts';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const formData = await req.formData();
@@ -10,7 +10,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (digit !== '9') {
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna">Your request was not cancelled. Goodbye.</Say>
+  ${say(`Your request has not been cancelled. Thank you, goodbye.`)}
   <Hangup/>
 </Response>`;
     return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });
@@ -26,29 +26,23 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!guest) {
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna">Your request was already cancelled or could not be found. Goodbye.</Say>
+  ${say(`Your request has already been cancelled, or we couldn't find it. Thank you, goodbye.`)}
   <Hangup/>
 </Response>`;
     return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });
   }
 
-  // Soft delete
   await supabaseAdmin
     .from('guests')
-    .update({
-      cancelled_at: new Date().toISOString(),
-      cancellation_source: 'voice',
-    })
+    .update({ cancelled_at: new Date().toISOString(), cancellation_source: 'voice' })
     .eq('id', guest.id);
 
-  // Cancel any non-terminal matches involving this guest
   await supabaseAdmin
     .from('matches')
     .update({ status: 'cancelled' })
     .eq('guest_id', guest.id)
     .in('status', ['proposed', 'notified']);
 
-  // Send SMS confirmation
   if (guest.phone) {
     await sendSms({
       to: guest.phone,
@@ -61,7 +55,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna">Your accommodation request has been cancelled. We've sent a confirmation text message. Thank you, goodbye.</Say>
+  ${say(`Your accommodation request has been cancelled. I've also sent you a confirmation text message. Thank you, goodbye.`)}
   <Hangup/>
 </Response>`;
   return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });

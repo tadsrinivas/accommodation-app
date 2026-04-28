@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { escapeXml } from '@/lib/voice-intake';
+import { say } from '@/lib/voice-prompts';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const url = new URL(req.url);
@@ -15,7 +16,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   if (!host) {
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response><Say voice="Polly.Joanna">We couldn't find your hosting record. Goodbye.</Say><Hangup/></Response>`;
+<Response>${say(`I'm sorry, I couldn't find your hosting record. Thank you, goodbye.`)}<Hangup/></Response>`;
     return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });
   }
 
@@ -25,9 +26,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Gather numDigits="1" action="${escapeXml(confirmAction)}" method="POST" timeout="8">
-    <Say voice="Polly.Joanna">We found your hosting record: capacity ${host.capacity}. To permanently remove yourself from the host pool, press 9. To stay registered, press any other key.</Say>
+    ${say(`I found your hosting record, with a capacity of ${host.capacity}.`)}
+    <Pause length="1"/>
+    ${say(`To permanently remove yourself from the host pool, please press nine. To stay registered, press any other key.`)}
   </Gather>
-  <Say voice="Polly.Joanna">No response received. Your record was not changed. Goodbye.</Say>
+  ${say(`I didn't receive a response. Your record has not been changed. Thank you, goodbye.`)}
   <Hangup/>
 </Response>`;
   return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });

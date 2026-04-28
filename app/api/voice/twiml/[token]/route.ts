@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-
-// Twilio fetches this URL when the call is answered. We respond with TwiML
-// that speaks a message and gathers a single keypad digit.
+import { escapeXml } from '@/lib/voice-intake';
+import { say, safeSay } from '@/lib/voice-prompts';
 
 export async function POST(req: NextRequest, { params }: { params: { token: string } }) {
   return handle(req, params.token);
 }
-
 export async function GET(req: NextRequest, { params }: { params: { token: string } }) {
   return handle(req, params.token);
 }
@@ -24,37 +22,29 @@ async function handle(req: NextRequest, token: string) {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL!;
   const gatherUrl = `${siteUrl}/api/voice/gather/${token}`;
 
-  // Detect if Twilio reached an answering machine
   const formData = await req.formData().catch(() => null);
   const answeredBy = formData?.get('AnsweredBy') as string | undefined;
 
-  // If voicemail, leave a short message and hang up.
+  // Voicemail detection: leave a brief, warm message
   if (answeredBy === 'machine_start' || answeredBy === 'machine_end_beep' ||
       answeredBy === 'machine_end_silence' || answeredBy === 'machine_end_other') {
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Pause length="2"/>
-  <Say voice="Polly.Joanna">Hi ${escapeXml(hostName)}, this is the accommodation team for ${escapeXml(eventName)}. We're trying to reach you about hosting again this year. Please check your email or text messages for a confirmation link, or contact the event coordinator. Thank you.</Say>
+  ${safeSay(`Hello ${hostName}, this is the accommodation team for ${eventName}. We were hoping to ask if you might be able to host again this year. Please check your email or text messages for a confirmation link, or contact the event coordinator. Thank you so much, and have a wonderful day.`)}
 </Response>`;
     return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });
   }
 
-  // Live human — gather keypad input
+  // Live caller
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Gather numDigits="1" action="${escapeXml(gatherUrl)}" method="POST" timeout="8">
-    <Say voice="Polly.Joanna">Hi ${escapeXml(hostName)}, this is the accommodation team for ${escapeXml(eventName)}. We're checking if you're able to host guests again this year. To confirm yes, press 1. To decline, press 2. To repeat this message, press 9.</Say>
+    ${safeSay(`Hello ${hostName}, this is the accommodation team for ${eventName}. We're getting in touch to ask if you might be able to host again this year.`)}
+    <Pause length="1"/>
+    ${say(`If you're able to host, please press one. If you're not able to this year, please press two. To repeat this message, please press nine.`)}
   </Gather>
-  <Say voice="Polly.Joanna">We didn't receive a response. We'll follow up by email. Thank you, goodbye.</Say>
+  ${say(`I didn't hear a response. We'll follow up by email. Thank you, goodbye.`)}
 </Response>`;
   return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });
-}
-
-function escapeXml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
 }
