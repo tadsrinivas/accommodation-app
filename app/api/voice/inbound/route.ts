@@ -16,8 +16,8 @@ async function handle(req: NextRequest) {
 
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Gather numDigits="1" action="${escapeXml(action)}" method="POST" timeout="6">
-    ${safeSay(`Namaste, and welcome to the accommodation helpline for ${eventName}. We're glad you called.`)}
+  <Gather numDigits="1" action="${escapeXml(action)}" method="POST" timeout="8">
+    ${safeSay(`Hare Krishna, and welcome to the accommodation helpline for ${eventName}. We're glad you called.`)}
     <Pause length="1"/>
     ${say('To request accommodation as a guest, please press one. If you are offering to host, please press two. To leave a voice message for the coordinator, please press zero.')}
   </Gather>
