@@ -4,6 +4,7 @@ import { decideNextAction, MANUAL_REQUIRED_STEP } from '@/lib/scheduler';
 import { OutreachChannel, outreachConfig } from '@/lib/outreach-config';
 import { sendEmail, hostReconfirmEmail } from '@/lib/email';
 import { sendSms, hostReconfirmSms } from '@/lib/sms';
+import { outreachSmsReminderEmail } from '@/lib/email';
 import { placeReconfirmCall } from '@/lib/voice';
 
 /**
@@ -154,6 +155,22 @@ async function executeChannel(channel: OutreachChannel, host: any) {
       recipientType: 'host',
       recipientId: host.id,
       purpose: 'reconfirm',
+    });
+  }
+
+  // Dual-channel resilience: if the configured stage is 'sms' (alone), also send
+  // a reminder email. This way SMS deliverability issues (e.g. A2P registration
+  // delays) don't silently cause the host to miss the reminder.
+  if (channel === 'sms') {
+    const tpl = outreachSmsReminderEmail({ name: host.name, link });
+    await sendEmail({
+      to: host.email,
+      subject: tpl.subject,
+      html: tpl.html,
+      text: tpl.text,
+      recipientType: 'host',
+      recipientId: host.id,
+      purpose: 'reconfirm_sms_companion',
     });
   }
 

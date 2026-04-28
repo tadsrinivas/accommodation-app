@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import { sendSms } from '@/lib/sms';
+import { notifyBoth } from '@/lib/notify';
+import { guestCancellationEmail } from '@/lib/email';
 import { say } from '@/lib/voice-prompts';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { data: guest } = await supabaseAdmin
     .from('guests')
-    .select('id, name, phone')
+    .select('id, name, phone, email')
     .eq('id', params.id)
     .is('cancelled_at', null)
     .maybeSingle();
@@ -43,19 +44,22 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .eq('guest_id', guest.id)
     .in('status', ['proposed', 'notified']);
 
-  if (guest.phone) {
-    await sendSms({
-      to: guest.phone,
-      body: `Your accommodation request was cancelled. If this was a mistake, please reply HELP or contact the event coordinator.`,
-      recipientType: 'guest',
-      recipientId: guest.id,
-      purpose: 'cancellation_confirmed',
-    });
-  }
+  const emailTpl = guestCancellationEmail({ name: guest.name });
+  await notifyBoth({
+    email: guest.email,
+    phone: guest.phone,
+    emailSubject: emailTpl.subject,
+    emailHtml: emailTpl.html,
+    emailText: emailTpl.text,
+    smsBody: `Your accommodation request was cancelled. If this was a mistake, please contact the event coordinator.`,
+    recipientType: 'guest',
+    recipientId: guest.id,
+    purpose: 'cancellation_confirmed',
+  });
 
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  ${say(`Your accommodation request has been cancelled. I've also sent you a confirmation text message. Thank you, goodbye.`)}
+  ${say(`Your accommodation request has been cancelled. I've also sent a confirmation by email and text. Thank you, goodbye.`)}
   <Hangup/>
 </Response>`;
   return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });

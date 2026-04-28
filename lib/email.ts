@@ -18,7 +18,6 @@ export async function sendEmail(args: SendEmailArgs) {
     const result = await resend.emails.send({
       from: process.env.EMAIL_FROM!,
       to: args.to,
-      replyTo: 'info@harilimos.com',
       subject: args.subject,
       html: args.html,
       text: args.text,
@@ -220,5 +219,109 @@ export function hostRejectedEmail(host: { name: string }, note?: string) {
       <p>We genuinely appreciate your generosity.</p>
     `,
     text: `Hi ${host.name}, thank you for offering to host for ${eventName()}. ${note || "We've filled our host pool for this year but appreciate the offer."}`,
+  };
+}
+
+// ============================================================
+// Email templates that mirror SMS-only purposes (for dual-channel notify).
+// Each template returns { subject, html, text } matching the email helper signature.
+// ============================================================
+
+/** Voice intake completion link — sent after guest finishes voice intake call. */
+export function intakeCompletionEmail(args: { name: string | null; link: string }) {
+  const greeting = args.name ? `Hi ${args.name}` : 'Hi';
+  return {
+    subject: `${eventName()}: Finish your accommodation request`,
+    html: `
+      <p>${greeting},</p>
+      <p>Thanks for calling! To complete your accommodation request, please tap the link below to confirm your details and add your email address.</p>
+      <p><a href="${args.link}" style="display:inline-block;padding:12px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Complete my request</a></p>
+      <p>Or copy this link: ${args.link}</p>
+    `,
+    text: `${greeting}, please complete your accommodation request: ${args.link}`,
+  };
+}
+
+/** Modify link for an existing guest record. */
+export function guestModifyLinkEmail(args: { name: string; link: string }) {
+  return {
+    subject: `${eventName()}: Update your accommodation request`,
+    html: `
+      <p>Hi ${args.name},</p>
+      <p>You can update your accommodation request using the link below. The link will expire in 24 hours.</p>
+      <p><a href="${args.link}" style="display:inline-block;padding:12px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Update my request</a></p>
+      <p>Or copy this link: ${args.link}</p>
+    `,
+    text: `Hi ${args.name}, update your request here: ${args.link} (expires in 24 hours)`,
+  };
+}
+
+/** Modify link for an existing host record. */
+export function hostModifyLinkEmail(args: { name: string; link: string }) {
+  return {
+    subject: `${eventName()}: Update your hosting profile`,
+    html: `
+      <p>Hi ${args.name},</p>
+      <p>You can update your hosting profile (capacity, address, notes) using the link below.</p>
+      <p><a href="${args.link}" style="display:inline-block;padding:12px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Manage my profile</a></p>
+      <p>Or copy this link: ${args.link}</p>
+    `,
+    text: `Hi ${args.name}, manage your hosting profile: ${args.link}`,
+  };
+}
+
+/** Confirmation that a guest's request has been cancelled. */
+export function guestCancellationEmail(args: { name: string }) {
+  return {
+    subject: `${eventName()}: Your accommodation request was cancelled`,
+    html: `
+      <p>Hi ${args.name},</p>
+      <p>Your accommodation request has been cancelled.</p>
+      <p>If this was a mistake, please contact the event coordinator and we'll restore your request.</p>
+    `,
+    text: `Your accommodation request was cancelled. If this was a mistake, please contact the event coordinator.`,
+  };
+}
+
+/** Confirmation that a host has been removed from the pool. */
+export function hostCancellationEmail(args: { name: string }) {
+  return {
+    subject: `${eventName()}: You've been removed from the host pool`,
+    html: `
+      <p>Hi ${args.name},</p>
+      <p>You've been removed from the host pool.</p>
+      <p>If this was a mistake, please contact the event coordinator and we'll add you back.</p>
+      <p>Thank you for your generosity in hosting with us.</p>
+    `,
+    text: `You've been removed from the host pool. If this was a mistake, please contact the event coordinator.`,
+  };
+}
+
+/** Host-signup link sent after voice "press 1 for new host". */
+export function hostSignupLinkEmail(args: { link: string }) {
+  return {
+    subject: `${eventName()}: Complete your host signup`,
+    html: `
+      <p>Hi,</p>
+      <p>Thank you so much for offering to host! To complete your signup, please tap the link below. After you submit, a coordinator will review and approve.</p>
+      <p><a href="${args.link}" style="display:inline-block;padding:12px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Complete my signup</a></p>
+      <p>Or copy this link: ${args.link}</p>
+    `,
+    text: `Thanks for offering to host! Complete your signup: ${args.link}`,
+  };
+}
+
+/** Outreach SMS reminder #2 — Day 2 check-in (parallel email version). */
+export function outreachSmsReminderEmail(args: { name: string; link: string }) {
+  return {
+    subject: `${eventName()}: Friendly reminder — can you host?`,
+    html: `
+      <p>Hi ${args.name},</p>
+      <p>Just a friendly reminder — can you host for ${eventName()} this year? It only takes a moment to respond.</p>
+      <p><a href="${args.link}" style="display:inline-block;padding:12px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Respond here</a></p>
+      <p>Or copy this link: ${args.link}</p>
+      <p>Thank you!</p>
+    `,
+    text: `Hi ${args.name}, friendly reminder — can you host for ${eventName()}? Respond: ${args.link}`,
   };
 }

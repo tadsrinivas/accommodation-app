@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { escapeXml } from '@/lib/voice-intake';
 import { say, safeSay } from '@/lib/voice-prompts';
-import { sendSms } from '@/lib/sms';
+import { notifyBoth } from '@/lib/notify';
 
 export async function POST(req: NextRequest) {
   const url = new URL(req.url);
@@ -47,23 +47,32 @@ export async function POST(req: NextRequest) {
   }
 
   const completionLink = `${siteUrl}/intake/${session.confirm_token}`;
-  let smsOk = false;
 
-  if (session.caller_phone) {
-    const body = `Hi${session.name ? ' ' + session.name : ''}! To finish your accommodation request for ${eventName}, please tap this link to confirm your details and add your email: ${completionLink}`;
-    const smsRes = await sendSms({
-      to: session.caller_phone,
-      body,
-      recipientType: 'guest',
-      recipientId: session.id,
-      purpose: 'voice_intake_completion',
-    });
-    smsOk = smsRes.ok;
-  }
+  // Voice intake doesn't have email yet — only the caller's phone.
+  // Email will be added by the caller themselves on the completion page.
+  // For now, we just send SMS. (When voice intake captures email later,
+  // this becomes notifyBoth — both link delivery channels.)
+  // For the dual-channel migration, we use notifyBoth so this call site
+  // is consistent, but pass null for email since we don't have one yet.
+  const smsBody = `Hi${session.name ? ' ' + session.name : ''}! To finish your accommodation request for ${eventName}, please tap this link to confirm your details and add your email: ${completionLink}`;
 
-  const closingMsg = smsOk
-    ? `Wonderful. I've recorded your group size as ${partySize}. To complete your request, please check the text message I just sent. It has a link where you can confirm everything and add your email. Thank you so much for calling.`
-    : `I've recorded your group size as ${partySize}. I wasn't able to send a follow-up text to this number, so please visit our website to finish. Thank you for calling.`;
+  // Note: email is null here because voice intake captures email AFTER this step.
+  // Once email is on file (via the completion page) future notifications will use both.
+  const result = await notifyBoth({
+    email: null,
+    phone: session.caller_phone,
+    emailSubject: '',
+    emailHtml: '',
+    smsBody,
+    recipientType: 'guest',
+    recipientId: session.id,
+    purpose: 'voice_intake_completion',
+  });
+  const linkOk = result.smsOk;
+
+  const closingMsg = linkOk
+    ? `Wonderful. I've recorded your group size as ${partySize}. To complete your request, please check the message I just sent. It has a link where you can confirm everything and add your email. Thank you so much for calling.`
+    : `I've recorded your group size as ${partySize}. I wasn't able to send a follow-up message to this number, so please visit our website to finish. Thank you for calling.`;
 
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import { sendSms } from '@/lib/sms';
+import { notifyBoth } from '@/lib/notify';
+import { hostCancellationEmail } from '@/lib/email';
 import { say } from '@/lib/voice-prompts';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { data: host } = await supabaseAdmin
     .from('hosts')
-    .select('id, name, phone')
+    .select('id, name, phone, email')
     .eq('id', params.id)
     .is('cancelled_at', null)
     .maybeSingle();
@@ -47,19 +48,22 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .eq('host_id', host.id)
     .in('status', ['proposed', 'notified']);
 
-  if (host.phone) {
-    await sendSms({
-      to: host.phone,
-      body: `You've been removed from the host pool. If this was a mistake, please reply HELP or contact the event coordinator.`,
-      recipientType: 'host',
-      recipientId: host.id,
-      purpose: 'cancellation_confirmed',
-    });
-  }
+  const emailTpl = hostCancellationEmail({ name: host.name });
+  await notifyBoth({
+    email: host.email,
+    phone: host.phone,
+    emailSubject: emailTpl.subject,
+    emailHtml: emailTpl.html,
+    emailText: emailTpl.text,
+    smsBody: `You've been removed from the host pool. If this was a mistake, please contact the event coordinator.`,
+    recipientType: 'host',
+    recipientId: host.id,
+    purpose: 'cancellation_confirmed',
+  });
 
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  ${say(`You've been removed from the host pool. I've sent you a confirmation text message. Thank you so much for your generosity. Goodbye.`)}
+  ${say(`You've been removed from the host pool. I've sent a confirmation by email and text. Thank you so much for your generosity. Goodbye.`)}
   <Hangup/>
 </Response>`;
   return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });
