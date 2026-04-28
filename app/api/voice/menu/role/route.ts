@@ -10,6 +10,14 @@ export async function POST(req: NextRequest) {
   const fromNumber = String(formData.get('From') || '');
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL!;
 
+  // Press 0 → voicemail
+  if (digit === '0') {
+    const redirect = `${siteUrl}/api/voice/voicemail/start?call_sid=${encodeURIComponent(callSid)}`;
+    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response><Redirect method="POST">${escapeXml(redirect)}</Redirect></Response>`;
+    return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });
+  }
+
   if (digit !== '1' && digit !== '2') {
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
