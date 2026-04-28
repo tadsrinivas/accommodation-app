@@ -41,11 +41,15 @@ export default function Home() {
         </Link>
       </div>
 
-      <p className="text-center text-sm text-slate-500 pt-8">
-        Existing hosts: check your email or text messages for your unique management link.
+      <p className="text-center text-sm text-slate-600 pt-8">
+        Already submitted?{' '}
+        <Link href="/retrieve" className="text-blue-600 hover:underline font-medium">
+          Find my record
+        </Link>{' '}
+        to manage your accommodation request or hosting profile.
       </p>
       <p className="text-center text-xs text-slate-400">
-        Prefer to request accommodation by phone? Call us — we&apos;ll capture your details over the call and text you a link to finish.
+        Prefer to request accommodation by phone? Call us — we&apos;ll capture your details over the call and send you a link to finish.
       </p>
     </div>
   );
