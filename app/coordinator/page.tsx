@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { RemoveConfirmDialog } from '@/components/RemoveConfirmDialog';
+import { RemovedTab } from '@/components/RemovedTab';
 
 export default function CoordinatorPage() {
   const [password, setPassword] = useState('');
@@ -39,8 +41,9 @@ export default function CoordinatorPage() {
 }
 
 function Dashboard({ token, onLogout }: { token: string; onLogout: () => void }) {
-  const [tab, setTab] = useState<'hosts' | 'outreach' | 'guests' | 'matches' | 'intake'>('hosts');
+  const [tab, setTab] = useState<'hosts' | 'outreach' | 'guests' | 'matches' | 'intake' | 'removed'>('hosts');
   const [hosts, setHosts] = useState<any[]>([]);
+  const [removeTarget, setRemoveTarget] = useState<{ type: 'host' | 'guest'; id: string; name: string } | null>(null);
   const [pending, setPending] = useState<any[]>([]);
   const [manualList, setManualList] = useState<any[]>([]);
   const [guests, setGuests] = useState<any[]>([]);
@@ -165,7 +168,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
       </header>
 
       <nav className="flex gap-2 border-b border-slate-200">
-        {(['hosts', 'outreach', 'guests', 'intake', 'matches'] as const).map((t) => (
+        {(['hosts', 'outreach', 'guests', 'intake', 'matches', 'removed'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -233,7 +236,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
               <table className="w-full text-sm">
                 <thead className="bg-slate-50">
                   <tr>
-                    <Th>Name</Th><Th>Email</Th><Th>Phone</Th><Th>Capacity</Th><Th>Status</Th><Th>Approval</Th><Th>Source</Th>
+                    <Th>Name</Th><Th>Email</Th><Th>Phone</Th><Th>Capacity</Th><Th>Status</Th><Th>Approval</Th><Th>Source</Th><Th>Actions</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -254,6 +257,14 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
                         {h.approval_status === 'rejected' && <Badge color="red">Rejected</Badge>}
                       </Td>
                       <Td className="text-xs">{h.source || 'imported'}</Td>
+                      <Td>
+                        <button
+                          onClick={() => setRemoveTarget({ type: 'host', id: h.id, name: h.name })}
+                          className="px-2 py-1 text-xs rounded border border-red-300 text-red-700 hover:bg-red-50"
+                        >
+                          Remove
+                        </button>
+                      </Td>
                     </tr>
                   ))}
                 </tbody>
@@ -329,13 +340,21 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
             <table className="w-full text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  <Th>Name</Th><Th>Email</Th><Th>Arrival</Th><Th>Departure</Th><Th>Party</Th><Th>Notes</Th>
+                  <Th>Name</Th><Th>Email</Th><Th>Arrival</Th><Th>Departure</Th><Th>Party</Th><Th>Notes</Th><Th>Actions</Th>
                 </tr>
               </thead>
               <tbody>
                 {guests.map((g) => (
                   <tr key={g.id} className="border-t border-slate-100">
                     <Td>{g.name}</Td><Td>{g.email}</Td><Td>{g.arrival_date}</Td><Td>{g.departure_date}</Td><Td>{g.party_size}</Td><Td>{g.notes || '—'}</Td>
+                    <Td>
+                      <button
+                        onClick={() => setRemoveTarget({ type: 'guest', id: g.id, name: g.name })}
+                        className="px-2 py-1 text-xs rounded border border-red-300 text-red-700 hover:bg-red-50"
+                      >
+                        Remove
+                      </button>
+                    </Td>
                   </tr>
                 ))}
               </tbody>
@@ -449,6 +468,25 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
             </div>
           </div>
         </section>
+      )}
+
+      {tab === 'removed' && <RemovedTab token={token} />}
+
+      {removeTarget && (
+        <RemoveConfirmDialog
+          recordType={removeTarget.type}
+          recordId={removeTarget.id}
+          recordName={removeTarget.name}
+          token={token}
+          onClose={() => setRemoveTarget(null)}
+          onConfirmed={() => {
+            setRemoveTarget(null);
+            setStatus(`${removeTarget.type === 'host' ? 'Host' : 'Guest'} ${removeTarget.name} was removed.`);
+            // Reload the appropriate active list
+            if (removeTarget.type === 'host') loadHosts();
+            else loadGuests();
+          }}
+        />
       )}
     </div>
   );
