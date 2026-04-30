@@ -40,8 +40,8 @@ export function RemoveConfirmDialog({
 
   useEffect(() => {
     const url = recordType === 'host'
-      ? `/api/hosts/${recordId}/matches`
-      : `/api/guests/${recordId}/matches`;
+      ? `/api/coordinator/hosts/${recordId}/matches`
+      : `/api/coordinator/guests/${recordId}/matches`;
 
     fetch(url, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
@@ -63,8 +63,8 @@ export function RemoveConfirmDialog({
     setError(null);
 
     const url = recordType === 'host'
-      ? `/api/hosts/${recordId}`
-      : `/api/guests/${recordId}`;
+      ? `/api/coordinator/hosts/${recordId}`
+      : `/api/coordinator/guests/${recordId}`;
 
     const res = await fetch(url, {
       method: 'DELETE',

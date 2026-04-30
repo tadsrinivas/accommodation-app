@@ -55,7 +55,7 @@ export function RemovedTab({ token }: { token: string }) {
   async function restore(type: 'host' | 'guest', id: string, name: string) {
     setStatus(null);
     setError(null);
-    const url = type === 'host' ? `/api/hosts/${id}/restore` : `/api/guests/${id}/restore`;
+    const url = type === 'host' ? `/api/coordinator/hosts/${id}/restore` : `/api/coordinator/guests/${id}/restore`;
     const r = await fetch(url, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
@@ -86,8 +86,8 @@ export function RemovedTab({ token }: { token: string }) {
     setStatus(null);
     setError(null);
     const url = type === 'host'
-      ? `/api/hosts/${id}/permanent`
-      : `/api/guests/${id}/permanent`;
+      ? `/api/coordinator/hosts/${id}/permanent`
+      : `/api/coordinator/guests/${id}/permanent`;
     const r = await fetch(url, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },

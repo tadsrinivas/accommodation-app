@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { RemoveConfirmDialog } from '@/components/RemoveConfirmDialog';
 import { RemovedTab } from '@/components/RemovedTab';
+import { EditRecordDialog } from '@/components/EditRecordDialog';
 
 export default function CoordinatorPage() {
   const [password, setPassword] = useState('');
@@ -44,6 +45,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
   const [tab, setTab] = useState<'hosts' | 'outreach' | 'guests' | 'matches' | 'intake' | 'removed'>('hosts');
   const [hosts, setHosts] = useState<any[]>([]);
   const [removeTarget, setRemoveTarget] = useState<{ type: 'host' | 'guest'; id: string; name: string } | null>(null);
+  const [editTarget, setEditTarget] = useState<{ type: 'host' | 'guest'; id: string } | null>(null);
   const [pending, setPending] = useState<any[]>([]);
   const [manualList, setManualList] = useState<any[]>([]);
   const [guests, setGuests] = useState<any[]>([]);
@@ -258,12 +260,20 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
                       </Td>
                       <Td className="text-xs">{h.source || 'imported'}</Td>
                       <Td>
-                        <button
-                          onClick={() => setRemoveTarget({ type: 'host', id: h.id, name: h.name })}
-                          className="px-2 py-1 text-xs rounded border border-red-300 text-red-700 hover:bg-red-50"
-                        >
-                          Remove
-                        </button>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => setEditTarget({ type: 'host', id: h.id })}
+                            className="px-2 py-1 text-xs rounded border border-blue-300 text-blue-700 hover:bg-blue-50"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => setRemoveTarget({ type: 'host', id: h.id, name: h.name })}
+                            className="px-2 py-1 text-xs rounded border border-red-300 text-red-700 hover:bg-red-50"
+                          >
+                            Remove
+                          </button>
+                        </div>
                       </Td>
                     </tr>
                   ))}
@@ -348,12 +358,20 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
                   <tr key={g.id} className="border-t border-slate-100">
                     <Td>{g.name}</Td><Td>{g.email}</Td><Td>{g.arrival_date}</Td><Td>{g.departure_date}</Td><Td>{g.party_size}</Td><Td>{g.notes || '—'}</Td>
                     <Td>
-                      <button
-                        onClick={() => setRemoveTarget({ type: 'guest', id: g.id, name: g.name })}
-                        className="px-2 py-1 text-xs rounded border border-red-300 text-red-700 hover:bg-red-50"
-                      >
-                        Remove
-                      </button>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => setEditTarget({ type: 'guest', id: g.id })}
+                          className="px-2 py-1 text-xs rounded border border-blue-300 text-blue-700 hover:bg-blue-50"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => setRemoveTarget({ type: 'guest', id: g.id, name: g.name })}
+                          className="px-2 py-1 text-xs rounded border border-red-300 text-red-700 hover:bg-red-50"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </Td>
                   </tr>
                 ))}
@@ -484,6 +502,21 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
             setStatus(`${removeTarget.type === 'host' ? 'Host' : 'Guest'} ${removeTarget.name} was removed.`);
             // Reload the appropriate active list
             if (removeTarget.type === 'host') loadHosts();
+            else loadGuests();
+          }}
+        />
+      )}
+
+      {editTarget && (
+        <EditRecordDialog
+          recordType={editTarget.type}
+          recordId={editTarget.id}
+          token={token}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => {
+            setEditTarget(null);
+            setStatus('Saved.');
+            if (editTarget.type === 'host') loadHosts();
             else loadGuests();
           }}
         />
