@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { notifyBoth } from '@/lib/notify';
 import { guestCancellationEmail } from '@/lib/email';
 import { say } from '@/lib/voice-prompts';
+import { smsBody as withSmsPrefix } from '@/lib/sms';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const formData = await req.formData();
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     emailSubject: emailTpl.subject,
     emailHtml: emailTpl.html,
     emailText: emailTpl.text,
-    smsBody: `Your accommodation request was cancelled. If this was a mistake, please contact the event coordinator.`,
+    smsBody: withSmsPrefix(`Your accommodation request was cancelled. If this was a mistake, please contact the event coordinator.`),
     recipientType: 'guest',
     recipientId: guest.id,
     purpose: 'cancellation_confirmed',

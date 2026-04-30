@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { notifyBoth } from '@/lib/notify';
 import { hostModifyLinkEmail } from '@/lib/email';
 import { say } from '@/lib/voice-prompts';
+import { smsBody as withSmsPrefix } from '@/lib/sms';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const { data: host } = await supabaseAdmin
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     emailSubject: emailTpl.subject,
     emailHtml: emailTpl.html,
     emailText: emailTpl.text,
-    smsBody: `Tap to update your hosting profile: ${link}`,
+    smsBody: withSmsPrefix(`Tap to update your hosting profile: ${link}`),
     recipientType: 'host',
     recipientId: host.id,
     purpose: 'modify_link',

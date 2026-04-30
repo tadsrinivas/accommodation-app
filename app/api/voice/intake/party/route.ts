@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { escapeXml } from '@/lib/voice-intake';
 import { say, safeSay } from '@/lib/voice-prompts';
 import { notifyBoth } from '@/lib/notify';
+import { smsBody as withSmsPrefix } from '@/lib/sms';
 
 export async function POST(req: NextRequest) {
   const url = new URL(req.url);
@@ -10,7 +11,6 @@ export async function POST(req: NextRequest) {
   const formData = await req.formData();
   const digits = String(formData.get('Digits') || '');
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL!;
-  const eventName = process.env.EVENT_NAME || 'our event';
 
   const partySize = parseInt(digits, 10);
   if (!partySize || partySize < 1 || partySize > 20) {
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
   // this becomes notifyBoth — both link delivery channels.)
   // For the dual-channel migration, we use notifyBoth so this call site
   // is consistent, but pass null for email since we don't have one yet.
-  const smsBody = `Hi${session.name ? ' ' + session.name : ''}! To finish your accommodation request for ${eventName}, please tap this link to confirm your details and add your email: ${completionLink}`;
+  const smsMessage = withSmsPrefix(`Hi${session.name ? ' ' + session.name : ''}! To finish your accommodation request, please tap this link to confirm your details and add your email: ${completionLink}`);
 
   // Note: email is null here because voice intake captures email AFTER this step.
   // Once email is on file (via the completion page) future notifications will use both.
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     phone: session.caller_phone,
     emailSubject: '',
     emailHtml: '',
-    smsBody,
+    smsBody: smsMessage,
     recipientType: 'guest',
     recipientId: session.id,
     purpose: 'voice_intake_completion',

@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { supabaseAdmin } from './supabase';
 import { sendEmail } from './email';
-import { sendSms } from './sms';
+import { sendSms, smsBody } from './sms';
 
 export type VerifyChannel = 'email' | 'sms';
 export type VerifyIntent = 'guest_form' | 'host_signup' | 'intake_complete';
@@ -79,7 +79,7 @@ export async function issueVerificationCode(args: {
   } else {
     const result = await sendSms({
       to: dest,
-      body: `${eventName}: your verification code is ${code}. It expires in 15 minutes.`,
+      body: smsBody(`Your verification code is ${code}. It expires in 15 minutes.`),
       recipientType: 'guest',
       recipientId: '00000000-0000-0000-0000-000000000000',
       purpose: `verify_${args.intent}`,

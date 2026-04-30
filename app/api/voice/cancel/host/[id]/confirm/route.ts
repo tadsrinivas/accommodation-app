@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { notifyBoth } from '@/lib/notify';
 import { hostCancellationEmail } from '@/lib/email';
 import { say } from '@/lib/voice-prompts';
+import { smsBody as withSmsPrefix } from '@/lib/sms';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const formData = await req.formData();
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     emailSubject: emailTpl.subject,
     emailHtml: emailTpl.html,
     emailText: emailTpl.text,
-    smsBody: `You've been removed from the host pool. If this was a mistake, please contact the event coordinator.`,
+    smsBody: withSmsPrefix(`You've been removed from the host pool. If this was a mistake, please contact the event coordinator.`),
     recipientType: 'host',
     recipientId: host.id,
     purpose: 'cancellation_confirmed',

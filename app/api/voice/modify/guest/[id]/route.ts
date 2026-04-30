@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { notifyBoth } from '@/lib/notify';
 import { guestModifyLinkEmail } from '@/lib/email';
 import { say } from '@/lib/voice-prompts';
+import { smsBody as withSmsPrefix } from '@/lib/sms';
 import crypto from 'crypto';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     emailSubject: emailTpl.subject,
     emailHtml: emailTpl.html,
     emailText: emailTpl.text,
-    smsBody: `Tap to update your accommodation request: ${link} (link expires in 24 hours)`,
+    smsBody: withSmsPrefix(`Tap to update your accommodation request: ${link} (link expires in 24 hours)`),
     recipientType: 'guest',
     recipientId: guest.id,
     purpose: 'modify_link',

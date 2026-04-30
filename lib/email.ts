@@ -307,7 +307,7 @@ export function hostSignupLinkEmail(args: { link: string }) {
       <p><a href="${args.link}" style="display:inline-block;padding:12px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Complete my signup</a></p>
       <p>Or copy this link: ${args.link}</p>
     `,
-    text: `Thanks for offering to host! Complete your signup: ${args.link}`,
+    text: `Thanks for offering to host for ${eventName()}! Complete your signup: ${args.link}`,
   };
 }
 

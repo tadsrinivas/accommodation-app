@@ -45,15 +45,36 @@ export async function sendSms(args: SendSmsArgs) {
   }
 }
 
+/**
+ * Returns the prefix used for all outbound SMS messages.
+ * Reads SMS_PREFIX (compact label for SMS), falling back to EVENT_NAME
+ * (full name used in emails), and finally to 'Event'.
+ *
+ * Example: SMS_PREFIX="Evt2025" → "Evt2025: ..."
+ *          EVENT_NAME="Annual Community Event" (no SMS_PREFIX) → "Annual Community Event: ..."
+ */
+export function smsPrefix(): string {
+  return process.env.SMS_PREFIX || process.env.EVENT_NAME || 'Event';
+}
+
+/**
+ * Wrap an SMS body with the configured prefix. Use this for every outbound
+ * SMS so messages have a consistent recognizable format for recipients.
+ *
+ *   smsBody("Tap to update your request: https://...")
+ *   → "Evt2025: Tap to update your request: https://..."
+ */
+export function smsBody(message: string): string {
+  return `${smsPrefix()}: ${message}`;
+}
+
 export function hostReconfirmSms(hostName: string, link: string) {
-  const eventName = process.env.EVENT_NAME || 'our event';
-  return `Hi ${hostName}, can you host again for ${eventName} this year? Please confirm here: ${link}`;
+  return smsBody(`Hi ${hostName}, can you host again this year? Please confirm here: ${link}`);
 }
 
 export function matchProposedSms(role: 'host' | 'guest', link: string) {
-  const eventName = process.env.EVENT_NAME || 'the event';
   if (role === 'host') {
-    return `${eventName}: You have a guest match proposal. Review & respond: ${link}`;
+    return smsBody(`You have a guest match proposal. Review & respond: ${link}`);
   }
-  return `${eventName}: Your accommodation match is ready. Confirm here: ${link}`;
+  return smsBody(`Your accommodation match is ready. Confirm here: ${link}`);
 }

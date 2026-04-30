@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { say } from '@/lib/voice-prompts';
 import { notifyBoth } from '@/lib/notify';
 import { hostSignupLinkEmail } from '@/lib/email';
+import { smsBody as withSmsPrefix } from '@/lib/sms';
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
     emailSubject: emailTpl.subject,
     emailHtml: emailTpl.html,
     emailText: emailTpl.text,
-    smsBody: `Thank you for offering to host! Please complete your signup here: ${link}`,
+    smsBody: withSmsPrefix(`Thank you for offering to host! Please complete your signup here: ${link}`),
     recipientType: 'host',
     recipientId: '00000000-0000-0000-0000-000000000000',
     purpose: 'host_signup_link',
