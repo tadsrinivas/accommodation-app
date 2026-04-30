@@ -34,9 +34,14 @@ export async function POST(req: NextRequest) {
     purpose: 'host_signup_link',
   });
 
+  const coordinatorEmail = process.env.COORDINATOR_EMAIL || '';
+  const fallbackMention = coordinatorEmail
+    ? ` If you don't receive the message within an hour, please email us at ${coordinatorEmail.replace(/@/g, ' at ').replace(/\./g, ' dot ')} and we'll help you complete your signup.`
+    : '';
+
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  ${say(`Thank you so much for offering to host. I've just sent a message with a link to complete your signup. Once you submit, a coordinator will review and confirm. We really appreciate your generosity. Thank you, and goodbye.`)}
+  ${say(`Thank you so much for offering to host. I've just sent a message with a link to complete your signup. Once you submit, a coordinator will review and confirm.${fallbackMention} We really appreciate your generosity. Thank you, and goodbye.`)}
   <Hangup/>
 </Response>`;
   return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });

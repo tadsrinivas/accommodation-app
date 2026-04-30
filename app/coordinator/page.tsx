@@ -114,16 +114,16 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
     else { const d = await res.json(); setStatus(`Reject failed: ${d.error}`); }
   }
 
- async function runOutreach() {
-  setStatus('Running outreach scheduler...');
-  const r = await fetch('/api/outreach/run', { method: 'POST', headers });
-  const d = await r.json();
-  setStatus(
-    `Processed ${d.processed}: sms+email=${d.sent_sms_email ?? 0}, sms=${d.sent_sms ?? 0}, email=${d.sent_email ?? 0}, voice=${d.sent_voice ?? 0}, flagged=${d.flagged_manual ?? 0}, skipped=${d.skipped ?? 0}, errors=${d.errors ?? 0}`
-  );
-  loadHosts();
-  loadManual();
-}
+  async function runOutreach() {
+    setStatus('Running outreach scheduler...');
+    const r = await fetch('/api/outreach/run', { method: 'POST', headers });
+    const d = await r.json();
+    setStatus(
+      `Processed ${d.processed}: sms+email=${d.sent_sms_email ?? 0}, sms=${d.sent_sms ?? 0}, email=${d.sent_email ?? 0}, voice=${d.sent_voice ?? 0}, flagged=${d.flagged_manual ?? 0}, skipped=${d.skipped ?? 0}, errors=${d.errors ?? 0}`
+    );
+    loadHosts();
+    loadManual();
+  }
 
   async function markManual(hostId: string, action: 'mark_yes' | 'mark_no' | 'mark_dnc') {
     await fetch('/api/outreach/manual', {
@@ -156,7 +156,12 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
     <div className="space-y-4">
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Coordinator dashboard</h1>
-        <button onClick={onLogout} className="text-sm text-slate-500 hover:text-slate-700">Logout</button>
+        <div className="flex items-center gap-4">
+          <a href="/coordinator/audit" className="text-sm text-amber-700 hover:text-amber-900 underline">
+            Records needing attention
+          </a>
+          <button onClick={onLogout} className="text-sm text-slate-500 hover:text-slate-700">Logout</button>
+        </div>
       </header>
 
       <nav className="flex gap-2 border-b border-slate-200">

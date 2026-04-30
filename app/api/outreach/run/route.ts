@@ -137,7 +137,7 @@ async function executeChannel(channel: OutreachChannel, host: any) {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL!;
   const link = `${siteUrl}/host/${host.confirm_token}`;
 
-  if (channel === 'email' || channel === 'sms+email') {
+  if ((channel === 'email' || channel === 'sms+email') && host.email) {
     const { subject, html, text } = hostReconfirmEmail(host);
     await sendEmail({
       to: host.email,
@@ -159,9 +159,10 @@ async function executeChannel(channel: OutreachChannel, host: any) {
   }
 
   // Dual-channel resilience: if the configured stage is 'sms' (alone), also send
-  // a reminder email. This way SMS deliverability issues (e.g. A2P registration
-  // delays) don't silently cause the host to miss the reminder.
-  if (channel === 'sms') {
+  // a reminder email (when email is available). This way SMS deliverability
+  // issues (e.g. A2P registration delays) don't silently cause the host to miss
+  // the reminder.
+  if (channel === 'sms' && host.email) {
     const tpl = outreachSmsReminderEmail({ name: host.name, link });
     await sendEmail({
       to: host.email,

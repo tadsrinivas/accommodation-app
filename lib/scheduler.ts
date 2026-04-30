@@ -26,7 +26,7 @@ interface HostOutreachState {
   confirmed_available: boolean | null;
   do_not_contact: boolean;
   phone: string | null;
-  email: string;
+  email: string | null;
 }
 
 export function decideNextAction(
@@ -89,9 +89,9 @@ function canUseChannel(channel: OutreachChannel, host: HostOutreachState): boole
     case 'voice':
       return Boolean(host.phone);
     case 'sms+email':
-      // Accept this stage even if only one channel is available;
-      // the executor will skip the missing half. Still requires email at minimum.
-      return Boolean(host.email);
+      // Accept this stage if EITHER channel is available; the executor will
+      // skip the missing half. Phone-only imported hosts are still contacted.
+      return Boolean(host.email) || Boolean(host.phone);
   }
 }
 

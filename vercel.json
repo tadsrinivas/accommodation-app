@@ -4,6 +4,10 @@
     {
       "path": "/api/outreach/run",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/coordinator/audit/digest",
+      "schedule": "0 13 * * *"
     }
   ]
 }

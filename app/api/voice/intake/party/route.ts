@@ -70,9 +70,14 @@ export async function POST(req: NextRequest) {
   });
   const linkOk = result.smsOk;
 
+  const coordinatorEmail = process.env.COORDINATOR_EMAIL || '';
+  const fallbackMention = coordinatorEmail
+    ? ` If you don't receive the message within an hour, please email us at ${coordinatorEmail.replace(/@/g, ' at ').replace(/\./g, ' dot ')} and we'll help you finish.`
+    : '';
+
   const closingMsg = linkOk
-    ? `Wonderful. I've recorded your group size as ${partySize}. To complete your request, please check the message I just sent. It has a link where you can confirm everything and add your email. Thank you so much for calling.`
-    : `I've recorded your group size as ${partySize}. I wasn't able to send a follow-up message to this number, so please visit our website to finish. Thank you for calling.`;
+    ? `Wonderful. I've recorded your group size as ${partySize}. To complete your request, please check the message I just sent. It has a link where you can confirm everything and add your email.${fallbackMention} Thank you so much for calling.`
+    : `I've recorded your group size as ${partySize}. I wasn't able to send a follow-up message to this number, so please visit our website to finish.${fallbackMention} Thank you for calling.`;
 
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
