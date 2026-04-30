@@ -307,7 +307,7 @@ export function hostSignupLinkEmail(args: { link: string }) {
       <p><a href="${args.link}" style="display:inline-block;padding:12px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Complete my signup</a></p>
       <p>Or copy this link: ${args.link}</p>
     `,
-    text: `Thanks for offering to host for ${eventName()}! Complete your signup: ${args.link}`,
+    text: `Thanks for offering to host! Complete your signup: ${args.link}`,
   };
 }
 
@@ -323,5 +323,27 @@ export function outreachSmsReminderEmail(args: { name: string; link: string }) {
       <p>Thank you!</p>
     `,
     text: `Hi ${args.name}, friendly reminder — can you host for ${eventName()}? Respond: ${args.link}`,
+  };
+}
+
+/**
+ * "You're confirmed as a host!" email — sent when a host reconfirms via web
+ * or voice on first transition from null → true. Mirrors the message that
+ * approved-signup hosts already receive, so the experience is consistent
+ * across all paths into the active host pool.
+ */
+export function hostReconfirmedEmail(host: { name: string; confirm_token: string }) {
+  const editLink = `${siteUrl()}/host/${host.confirm_token}/edit`;
+  return {
+    subject: `${eventName()}: Thank you for confirming!`,
+    html: `
+      <p>Hi ${host.name},</p>
+      <p>Thank you so much for confirming you can host for <strong>${eventName()}</strong> this year. We really appreciate your generosity!</p>
+      <p>You can update your hosting details (capacity, address, notes) anytime here:</p>
+      <p><a href="${editLink}" style="display:inline-block;padding:10px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Manage my hosting profile</a></p>
+      <p>Or copy this link: ${editLink}</p>
+      <p>We'll be in touch when we have a guest match for you.</p>
+    `,
+    text: `Hi ${host.name}, thanks for confirming you can host for ${eventName()}! Manage your profile: ${editLink}. We'll be in touch when we have a guest match.`,
   };
 }
