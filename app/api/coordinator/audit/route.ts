@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { requireCoordinator } from '@/lib/auth';
 
 /**
  * Coordinator audit API. Returns records that need manual attention because
@@ -15,10 +16,8 @@ import { supabaseAdmin } from '@/lib/supabase';
  *      receive the welcome email; coordinator should follow up.
  */
 export async function GET(req: NextRequest) {
-  const cookie = req.cookies.get('coord_auth')?.value;
-  if (cookie !== 'ok') {
-    return NextResponse.json({ error: 'Not authorized' }, { status: 401 });
-  }
+  const auth = requireCoordinator(req);
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 });
 
   // 1. Hosts without email, in the active outreach pipeline (not responded yet)
   const { data: hostsNoEmail, error: e1 } = await supabaseAdmin

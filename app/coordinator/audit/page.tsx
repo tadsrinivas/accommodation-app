@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 interface AuditData {
   counts: {
@@ -17,10 +18,35 @@ export default function AuditPage() {
   const [data, setData] = useState<AuditData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [unauthorized, setUnauthorized] = useState(false);
 
   async function load() {
     setLoading(true);
-    const res = await fetch('/api/coordinator/audit');
+    setError(null);
+
+    // Read auth from sessionStorage (same pattern as the main coordinator dashboard).
+    const token = typeof window !== 'undefined'
+      ? window.sessionStorage.getItem('coord_pw')
+      : null;
+
+    if (!token) {
+      setUnauthorized(true);
+      setLoading(false);
+      return;
+    }
+
+    const res = await fetch('/api/coordinator/audit', {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+
+    if (res.status === 401) {
+      // Token in sessionStorage was wrong/stale — clear it and prompt login
+      window.sessionStorage.removeItem('coord_pw');
+      setUnauthorized(true);
+      setLoading(false);
+      return;
+    }
+
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       setError(body.error || 'Failed to load');
@@ -33,25 +59,42 @@ export default function AuditPage() {
 
   useEffect(() => { load(); }, []);
 
+  if (unauthorized) {
+    return (
+      <div className="max-w-lg mx-auto bg-white rounded-lg border border-slate-200 p-8 mt-12 text-center space-y-3">
+        <h1 className="text-xl font-semibold">Not signed in</h1>
+        <p className="text-slate-600 text-sm">
+          You need to sign in to the coordinator dashboard first.
+        </p>
+        <Link href="/coordinator" className="inline-block mt-2 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700">
+          Go to dashboard
+        </Link>
+      </div>
+    );
+  }
+
   if (loading) return <p className="p-6 text-slate-500">Loading audit...</p>;
   if (error) return <p className="p-6 text-red-600">{error}</p>;
   if (!data) return null;
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold mb-1">Records needing attention</h1>
-        <p className="text-sm text-slate-600">
-          People the system can&apos;t notify automatically. Reach out to them manually
-          (call, personal email, etc.) and use the action links below.
-        </p>
-        <button
-          onClick={load}
-          className="mt-3 text-sm text-blue-600 hover:underline"
-        >
-          ↻ Refresh
-        </button>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold mb-1">Records needing attention</h1>
+          <p className="text-sm text-slate-600">
+            People the system can&apos;t notify automatically. Reach out to them manually
+            (call, personal email, etc.) and use the action links below.
+          </p>
+        </div>
+        <Link href="/coordinator" className="text-sm text-slate-500 hover:text-slate-700">
+          ← Back to dashboard
+        </Link>
       </div>
+
+      <button onClick={load} className="text-sm text-blue-600 hover:underline">
+        ↻ Refresh
+      </button>
 
       {/* Counts */}
       <div className="grid grid-cols-3 gap-4">
