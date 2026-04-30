@@ -82,7 +82,7 @@ export default function GuestEditPage() {
       <h1 className="text-2xl font-semibold mb-4">Update your request</h1>
       <form onSubmit={handleSubmit} className="space-y-4">
         <Field label="Name" value={name} onChange={setName} required />
-        <Field label="Phone" type="tel" value={phone} onChange={setPhone} />
+        <Field label="Phone" type="tel" value={phone} onChange={setPhone} required />
         <div className="grid grid-cols-2 gap-3">
           <Field label="Arrival" type="date" value={arrival} onChange={setArrival} required />
           <Field label="Departure" type="date" value={departure} onChange={setDeparture} required />

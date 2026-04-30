@@ -85,7 +85,7 @@ export default function HostEditPage() {
             className="w-full px-3 py-2 border border-slate-200 bg-slate-50 rounded-md text-sm text-slate-500"
           />
         </div>
-        <Field label="Phone" type="tel" value={phone} onChange={setPhone} />
+        <Field label="Phone" type="tel" value={phone} onChange={setPhone} required />
         <div>
           <label className="block text-sm font-medium mb-1">Maximum guests you can host</label>
           <input
@@ -104,6 +104,7 @@ export default function HostEditPage() {
             value={address}
             onChange={(e) => setAddress(e.target.value)}
             rows={2}
+            required
             className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
           />
         </div>

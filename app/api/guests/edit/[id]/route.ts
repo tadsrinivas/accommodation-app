@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import crypto from 'crypto';
-import { z } from 'zod';
+import { GuestEditSchema } from '@/lib/validation';
 
 /**
  * Guest edit endpoints — the SMS link from voice modify flow lands here.
@@ -50,15 +50,6 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   return NextResponse.json({ guest });
 }
 
-const EditSchema = z.object({
-  name: z.string().min(1).max(200),
-  phone: z.string().min(7).max(30).optional().or(z.literal('')),
-  arrival_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  departure_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  party_size: z.coerce.number().int().min(1).max(20),
-  notes: z.string().max(1000).optional().or(z.literal('')),
-});
-
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const url = new URL(req.url);
   const token = url.searchParams.get('t') || '';
@@ -67,7 +58,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   const body = await req.json();
-  const parsed = EditSchema.safeParse(body);
+  const parsed = GuestEditSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: 'Please check your details', issues: parsed.error.flatten() }, { status: 400 });
   }

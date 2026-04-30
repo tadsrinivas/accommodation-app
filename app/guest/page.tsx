@@ -66,7 +66,7 @@ export default function GuestFormPage() {
       <form onSubmit={handleSubmit} className="space-y-4">
         <Field label="Your name" value={name} onChange={setName} required />
         <Field label="Email" type="email" value={email} onChange={(v) => { setEmail(v); setVerified(false); }} required />
-        <Field label="Phone (optional)" type="tel" value={phone} onChange={(v) => { setPhone(v); setVerified(false); }} />
+        <Field label="Phone" type="tel" value={phone} onChange={(v) => { setPhone(v); setVerified(false); }} required />
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Arrival date" type="date" value={arrival} onChange={setArrival} required />
