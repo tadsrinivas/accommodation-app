@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
 
   const coordinatorEmail = process.env.COORDINATOR_EMAIL || '';
   const fallbackMention = coordinatorEmail
-    ? ` If you don't receive the message within an hour, please email us at ${coordinatorEmail.replace(/@/g, ' at ').replace(/\./g, ' dot ')} and we'll help you complete your signup.`
+    ? ` If you don't receive the message within an hour, please call us back and select optin 0 to leave a voice mail. We will call you back and help you complete your signup.`
     : '';
 
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
