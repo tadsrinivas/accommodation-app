@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { HostEditSchema } from '@/lib/validation';
 import { notifyBoth } from '@/lib/notify';
-import { hostReconfirmedEmail } from '@/lib/email';
+import { hostReconfirmedEmail, sendEmail, hostConfirmedNoEmailAlertEmail } from '@/lib/email';
 import { smsBody as withSmsPrefix } from '@/lib/sms';
 
 // Public endpoint: host clicks unique link → we fetch their record & let them confirm
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
   // first "yes" — re-confirms shouldn't re-spam the host.
   const { data: existing } = await supabaseAdmin
     .from('hosts')
-    .select('id, name, email, phone, confirm_token, confirmed_available')
+    .select('id, name, email, phone, capacity, confirm_token, confirmed_available')
     .eq('confirm_token', params.token)
     .single();
 
@@ -58,24 +58,48 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     Boolean(available) === true && existing.confirmed_available !== true;
 
   if (isFirstYes) {
-    const tpl = hostReconfirmedEmail({
-      name: existing.name,
-      confirm_token: existing.confirm_token,
-    });
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL!;
     const editLink = `${siteUrl}/host/${existing.confirm_token}/edit`;
 
-    await notifyBoth({
-      email: existing.email,
-      phone: existing.phone,
-      emailSubject: tpl.subject,
-      emailHtml: tpl.html,
-      emailText: tpl.text,
-      smsBody: withSmsPrefix(`Thanks for confirming you can host! Manage your profile: ${editLink}`),
-      recipientType: 'host',
-      recipientId: existing.id,
-      purpose: 'reconfirmed_welcome',
-    });
+    if (existing.email) {
+      // Standard path — host has email, send the welcome message.
+      const tpl = hostReconfirmedEmail({
+        name: existing.name,
+        confirm_token: existing.confirm_token,
+      });
+
+      await notifyBoth({
+        email: existing.email,
+        phone: existing.phone,
+        emailSubject: tpl.subject,
+        emailHtml: tpl.html,
+        emailText: tpl.text,
+        smsBody: withSmsPrefix(`Thanks for confirming you can host! Manage your profile: ${editLink}`),
+        recipientType: 'host',
+        recipientId: existing.id,
+        purpose: 'reconfirmed_welcome',
+      });
+    } else {
+      // No email on file — alert the coordinator to follow up manually.
+      const coordEmail = process.env.COORDINATOR_EMAIL;
+      if (coordEmail) {
+        const alertTpl = hostConfirmedNoEmailAlertEmail({
+          hostName: existing.name,
+          hostPhone: existing.phone,
+          capacity: existing.capacity,
+          profileLink: editLink,
+        });
+        await sendEmail({
+          to: coordEmail,
+          subject: alertTpl.subject,
+          html: alertTpl.html,
+          text: alertTpl.text,
+          recipientType: 'host',
+          recipientId: existing.id,
+          purpose: 'coord_alert_host_no_email',
+        });
+      }
+    }
   }
 
   return NextResponse.json({ host: data });

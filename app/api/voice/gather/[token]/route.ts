@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { escapeXml } from '@/lib/voice-intake';
 import { say } from '@/lib/voice-prompts';
 import { notifyBoth } from '@/lib/notify';
-import { hostReconfirmedEmail } from '@/lib/email';
+import { hostReconfirmedEmail, sendEmail, hostConfirmedNoEmailAlertEmail } from '@/lib/email';
 import { smsBody as withSmsPrefix } from '@/lib/sms';
 
 export async function POST(req: NextRequest, { params }: { params: { token: string } }) {
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     // Only send the welcome message once — re-presses shouldn't re-spam.
     const { data: existing } = await supabaseAdmin
       .from('hosts')
-      .select('id, name, email, phone, confirm_token, confirmed_available')
+      .select('id, name, email, phone, capacity, confirm_token, confirmed_available')
       .eq('confirm_token', params.token)
       .single();
 
@@ -50,29 +50,58 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
       .eq('confirm_token', params.token);
 
     if (existing && confirmedAvailable === true && existing.confirmed_available !== true) {
-      const tpl = hostReconfirmedEmail({
-        name: existing.name,
-        confirm_token: existing.confirm_token,
-      });
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL!;
       const editLink = `${siteUrl}/host/${existing.confirm_token}/edit`;
 
-      // Fire-and-forget — don't block the TwiML response on email/SMS sending.
-      // If notify fails, the host is still confirmed in the DB; they can use
-      // /retrieve to get their profile link.
-      notifyBoth({
-        email: existing.email,
-        phone: existing.phone,
-        emailSubject: tpl.subject,
-        emailHtml: tpl.html,
-        emailText: tpl.text,
-        smsBody: withSmsPrefix(`Thanks for confirming you can host! Manage your profile: ${editLink}`),
-        recipientType: 'host',
-        recipientId: existing.id,
-        purpose: 'reconfirmed_welcome',
-      }).catch((err) => {
-        console.error(`[voice gather] welcome notification failed for host ${existing.id}:`, err);
-      });
+      if (existing.email) {
+        // Host has email → send welcome to them as before.
+        const tpl = hostReconfirmedEmail({
+          name: existing.name,
+          confirm_token: existing.confirm_token,
+        });
+
+        // Fire-and-forget — don't block the TwiML response on email/SMS sending.
+        // If notify fails, the host is still confirmed in the DB; they can use
+        // /retrieve to get their profile link.
+        notifyBoth({
+          email: existing.email,
+          phone: existing.phone,
+          emailSubject: tpl.subject,
+          emailHtml: tpl.html,
+          emailText: tpl.text,
+          smsBody: withSmsPrefix(`Thanks for confirming you can host! Manage your profile: ${editLink}`),
+          recipientType: 'host',
+          recipientId: existing.id,
+          purpose: 'reconfirmed_welcome',
+        }).catch((err) => {
+          console.error(`[voice gather] welcome notification failed for host ${existing.id}:`, err);
+        });
+      } else {
+        // No email on file → can't auto-deliver welcome. Alert coordinator
+        // in real-time so they can call the host and capture an email.
+        const coordEmail = process.env.COORDINATOR_EMAIL;
+        if (coordEmail) {
+          const alertTpl = hostConfirmedNoEmailAlertEmail({
+            hostName: existing.name,
+            hostPhone: existing.phone,
+            capacity: existing.capacity,
+            profileLink: editLink,
+          });
+
+          // Fire-and-forget
+          sendEmail({
+            to: coordEmail,
+            subject: alertTpl.subject,
+            html: alertTpl.html,
+            text: alertTpl.text,
+            recipientType: 'host',
+            recipientId: existing.id,
+            purpose: 'coord_alert_host_no_email',
+          }).catch((err) => {
+            console.error(`[host no-email alert] failed for host ${existing.id}:`, err);
+          });
+        }
+      }
     }
   } else {
     await supabaseAdmin

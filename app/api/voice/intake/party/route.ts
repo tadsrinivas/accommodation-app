@@ -4,6 +4,7 @@ import { escapeXml } from '@/lib/voice-intake';
 import { say, safeSay } from '@/lib/voice-prompts';
 import { notifyBoth } from '@/lib/notify';
 import { smsBody as withSmsPrefix } from '@/lib/sms';
+import { sendEmail, stuckVoiceIntakeAlertEmail } from '@/lib/email';
 
 export async function POST(req: NextRequest) {
   const url = new URL(req.url);
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
       sms_sent_at: new Date().toISOString(),
     })
     .eq('call_sid', callSid)
-    .select('id, confirm_token, caller_phone, name')
+    .select('id, confirm_token, caller_phone, name, arrival_date, departure_date, coordinator_alerted_at')
     .single();
 
   if (!session) {
@@ -70,9 +71,46 @@ export async function POST(req: NextRequest) {
   });
   const linkOk = result.smsOk;
 
+  // Real-time coordinator alert if SMS failed (link won't reach the guest).
+  // Idempotent — only fires once per session via coordinator_alerted_at flag.
+  if (!linkOk && !session.coordinator_alerted_at) {
+    const coordEmail = process.env.COORDINATOR_EMAIL;
+    if (coordEmail) {
+      const tpl = stuckVoiceIntakeAlertEmail({
+        guestName: session.name,
+        callerPhone: session.caller_phone,
+        partySize: partySize,
+        arrivalDate: session.arrival_date,
+        departureDate: session.departure_date,
+        completionLink,
+      });
+
+      // Fire-and-forget — don't block the TwiML response on email delivery.
+      // If alert fails, the daily digest will catch it tomorrow as a backup.
+      sendEmail({
+        to: coordEmail,
+        subject: tpl.subject,
+        html: tpl.html,
+        text: tpl.text,
+        recipientType: 'guest',
+        recipientId: session.id,
+        purpose: 'coord_alert_stuck_intake',
+      }).then(() => {
+        // Mark as alerted so retries don't re-fire
+        supabaseAdmin
+          .from('guest_intake_sessions')
+          .update({ coordinator_alerted_at: new Date().toISOString() })
+          .eq('id', session.id)
+          .then(() => {});
+      }).catch((err) => {
+        console.error(`[stuck intake alert] failed for session ${session.id}:`, err);
+      });
+    }
+  }
+
   const coordinatorEmail = process.env.COORDINATOR_EMAIL || '';
   const fallbackMention = coordinatorEmail
-    ? ` If you don't receive the message within an hour, please call us back and select optin 0 to leave a voice mail. We will call you back and we'll help you finish.`
+    ? ` If you don't receive the message within an hour, please email us at ${coordinatorEmail.replace(/@/g, ' at ').replace(/\./g, ' dot ')} and we'll help you finish.`
     : '';
 
   const closingMsg = linkOk

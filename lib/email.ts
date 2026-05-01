@@ -347,3 +347,85 @@ export function hostReconfirmedEmail(host: { name: string; confirm_token: string
     text: `Hi ${host.name}, thanks for confirming you can host for ${eventName()}! Manage your profile: ${editLink}. We'll be in touch when we have a guest match.`,
   };
 }
+
+// ============================================================
+// Real-time coordinator alerts (manual-attention triggers)
+// ============================================================
+
+/**
+ * Sent the moment a voice intake's SMS link fails to deliver. The guest
+ * is hung up thinking they'll get a text, but they won't. Coordinator should
+ * call them back ASAP.
+ */
+export function stuckVoiceIntakeAlertEmail(args: {
+  guestName: string | null;
+  callerPhone: string | null;
+  partySize: number | null;
+  arrivalDate: string | null;
+  departureDate: string | null;
+  completionLink: string;
+}) {
+  const greeting = args.guestName ? args.guestName : '(name not captured)';
+  return {
+    subject: `[Action needed] Stuck voice intake: ${greeting}`,
+    html: `
+      <p>A guest just completed the voice intake but the SMS completion link could not be sent.</p>
+      <p>The guest hung up expecting a text message they will not receive. Please call them back to capture their email and complete the intake on their behalf.</p>
+      <ul>
+        <li><strong>Name:</strong> ${escapeHtml(greeting)}</li>
+        <li><strong>Phone:</strong> ${escapeHtml(args.callerPhone || '(unknown)')}</li>
+        <li><strong>Party size:</strong> ${args.partySize ?? '(not captured)'}</li>
+        <li><strong>Dates:</strong> ${escapeHtml(args.arrivalDate || '?')} → ${escapeHtml(args.departureDate || '?')}</li>
+      </ul>
+      <p><a href="${args.completionLink}" style="display:inline-block;padding:10px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Complete intake on their behalf</a></p>
+      <p style="font-size:12px;color:#64748b">After you complete the intake, this alert will not fire again for this guest.</p>
+    `,
+    text: `Stuck voice intake — please follow up.
+Name: ${greeting}
+Phone: ${args.callerPhone || '(unknown)'}
+Party: ${args.partySize ?? '?'}
+Dates: ${args.arrivalDate} → ${args.departureDate}
+Complete intake: ${args.completionLink}`,
+  };
+}
+
+/**
+ * Sent when a host confirms via voice (presses 1) but has no email on file.
+ * The welcome email + profile link can't be auto-delivered — coordinator
+ * needs to call the host, capture an email, and forward the link manually.
+ */
+export function hostConfirmedNoEmailAlertEmail(args: {
+  hostName: string;
+  hostPhone: string | null;
+  capacity: number;
+  profileLink: string;
+}) {
+  return {
+    subject: `[Action needed] Host confirmed but has no email: ${args.hostName}`,
+    html: `
+      <p>${escapeHtml(args.hostName)} just confirmed they can host this year — but we have no email on file, so the welcome message and profile link could not be sent automatically.</p>
+      <p>Please call them, capture an email address, and forward the profile link below.</p>
+      <ul>
+        <li><strong>Name:</strong> ${escapeHtml(args.hostName)}</li>
+        <li><strong>Phone:</strong> ${escapeHtml(args.hostPhone || '(unknown)')}</li>
+        <li><strong>Capacity:</strong> ${args.capacity}</li>
+      </ul>
+      <p><a href="${args.profileLink}" style="display:inline-block;padding:10px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Open host profile</a></p>
+      <p style="font-size:12px;color:#64748b">Use the profile page to add their email once you reach them. After that, future notifications will route through email automatically.</p>
+    `,
+    text: `Host confirmed without email — please follow up.
+Name: ${args.hostName}
+Phone: ${args.hostPhone || '(unknown)'}
+Capacity: ${args.capacity}
+Profile: ${args.profileLink}`,
+  };
+}
+
+function escapeHtml(s: string): string {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
