@@ -36,6 +36,7 @@ async function run(req: NextRequest) {
       .select('name, phone, capacity, source, last_attempt_at, confirmed_available')
       .or('email.is.null,email.eq.')
       .eq('approval_status', 'approved')
+      .eq('host_type', 'residence')
       .is('cancelled_at', null),
     supabaseAdmin
       .from('guest_intake_sessions')
@@ -46,6 +47,7 @@ async function run(req: NextRequest) {
       .from('hosts')
       .select('name, phone, capacity, confirmed_at')
       .eq('confirmed_available', true)
+      .eq('host_type', 'residence')
       .or('email.is.null,email.eq.')
       .is('cancelled_at', null),
   ]);

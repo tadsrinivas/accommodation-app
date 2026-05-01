@@ -34,6 +34,7 @@ const CoordHostUpdateSchema = z.object({
   notes: z.string().max(1000).nullable().optional().or(z.literal('')),
   approval_status: z.enum(['pending', 'approved', 'rejected']).optional(),
   confirmed_available: z.boolean().nullable().optional(),
+  host_type: z.enum(['residence', 'hotel']).optional(),
 });
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -79,6 +80,21 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   if (d.notes !== undefined) update.notes = d.notes ? d.notes.trim() : null;
   if (d.approval_status !== undefined) update.approval_status = d.approval_status;
   if (d.confirmed_available !== undefined) update.confirmed_available = d.confirmed_available;
+
+  // Host type change with side effects:
+  //   - When changed to 'hotel': auto-set confirmed_available=true (hotels are
+  //     commercial partners; they don't go through reconfirmation outreach so
+  //     they need to be available right away to be matchable).
+  //   - When changed to 'residence': leave confirmed_available as-is (let the
+  //     coordinator or outreach process determine availability).
+  // The auto-set only applies if the coordinator didn't explicitly set
+  // confirmed_available in the same request — explicit input wins.
+  if (d.host_type !== undefined) {
+    update.host_type = d.host_type;
+    if (d.host_type === 'hotel' && d.confirmed_available === undefined) {
+      update.confirmed_available = true;
+    }
+  }
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });

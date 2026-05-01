@@ -61,6 +61,7 @@ export function EditRecordDialog({
         notes: record.notes,
         approval_status: record.approval_status,
         confirmed_available: record.confirmed_available,
+        host_type: record.host_type,
       };
     } else {
       payload = {
@@ -118,6 +119,21 @@ export function EditRecordDialog({
               <NumberField label="Capacity" value={record.capacity || 1} onChange={(v) => setField('capacity', v)} min={1} max={30} />
               <TextArea label="Address" value={record.address || ''} onChange={(v) => setField('address', v)} rows={2} />
               <TextArea label="Notes" value={record.notes || ''} onChange={(v) => setField('notes', v)} rows={3} />
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Host type</label>
+                <select
+                  value={record.host_type || 'residence'}
+                  onChange={(e) => setField('host_type', e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white"
+                >
+                  <option value="residence">Residence (volunteer host)</option>
+                  <option value="hotel">Hotel (commercial partner)</option>
+                </select>
+                <p className="text-xs text-slate-500 mt-1">
+                  Hotels skip the reconfirmation outreach and are treated as available for matching.
+                </p>
+              </div>
 
               <div>
                 <label className="block text-sm font-medium mb-1">Approval status</label>

@@ -33,12 +33,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // Only contact residence hosts during outreach. Hotel hosts are commercial
+  // partners and don't go through the reconfirmation flow — they're set to
+  // confirmed_available=true at the moment of being marked as 'hotel'.
   const { data: hosts, error } = await supabaseAdmin
     .from('hosts')
     .select('*')
     .is('confirmed_available', null)
     .eq('do_not_contact', false)
-    .eq('approval_status', 'approved');
+    .eq('approval_status', 'approved')
+    .eq('host_type', 'residence')
+    .is('cancelled_at', null);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

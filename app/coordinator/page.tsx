@@ -244,7 +244,14 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
                 <tbody>
                   {hosts.map((h) => (
                     <tr key={h.id} className="border-t border-slate-100">
-                      <Td>{h.name}</Td>
+                      <Td>
+                        <div className="flex items-center gap-2">
+                          <span>{h.name}</span>
+                          {h.host_type === 'hotel' && (
+                            <Badge color="blue">Hotel</Badge>
+                          )}
+                        </div>
+                      </Td>
                       <Td className="text-xs">{h.email}</Td>
                       <Td className="text-xs">{h.phone || '—'}</Td>
                       <Td>{h.capacity}</Td>
@@ -598,12 +605,13 @@ function Th({ children }: { children: React.ReactNode }) {
 function Td({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return <td className={`px-3 py-2 ${className}`}>{children}</td>;
 }
-function Badge({ children, color }: { children: React.ReactNode; color: 'green' | 'amber' | 'slate' | 'red' }) {
+function Badge({ children, color }: { children: React.ReactNode; color: 'green' | 'amber' | 'slate' | 'red' | 'blue' }) {
   const classes = {
     green: 'bg-green-100 text-green-800',
     amber: 'bg-amber-100 text-amber-800',
     slate: 'bg-slate-100 text-slate-700',
     red: 'bg-red-100 text-red-800',
+    blue: 'bg-blue-100 text-blue-800',
   }[color];
   return <span className={`inline-block px-2 py-0.5 text-xs rounded-full ${classes}`}>{children}</span>;
 }

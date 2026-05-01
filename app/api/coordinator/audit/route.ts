@@ -19,12 +19,15 @@ export async function GET(req: NextRequest) {
   const auth = requireCoordinator(req);
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 });
 
-  // 1. Hosts without email, in the active outreach pipeline (not responded yet)
+  // 1. Residence hosts without email, in the active outreach pipeline.
+  // Hotel hosts are excluded — they don't go through outreach so missing
+  // email isn't a blocker for them.
   const { data: hostsNoEmail, error: e1 } = await supabaseAdmin
     .from('hosts')
     .select('id, name, phone, capacity, source, outreach_step, last_attempt_at, confirmed_available, confirm_token')
     .or('email.is.null,email.eq.')
     .eq('approval_status', 'approved')
+    .eq('host_type', 'residence')
     .is('cancelled_at', null)
     .order('last_attempt_at', { ascending: false, nullsFirst: false });
 
@@ -39,11 +42,14 @@ export async function GET(req: NextRequest) {
 
   const trulyStuck = stuckIntakes || [];
 
-  // 3. Confirmed-yes hosts without email — these need manual welcome/profile link
+  // 3. Confirmed-yes residence hosts without email — these need manual welcome.
+  // Hotels are auto-confirmed without going through this flow, so they're
+  // excluded.
   const { data: confirmedNoEmail, error: e3 } = await supabaseAdmin
     .from('hosts')
     .select('id, name, phone, capacity, confirmed_at, confirm_token')
     .eq('confirmed_available', true)
+    .eq('host_type', 'residence')
     .or('email.is.null,email.eq.')
     .is('cancelled_at', null)
     .order('confirmed_at', { ascending: false });
