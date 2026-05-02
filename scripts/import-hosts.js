@@ -4,8 +4,17 @@
  * Expected columns (case-insensitive, flexible naming):
  *   name | email | phone | capacity | address | notes
  *
+ * Required: name AND (email OR phone). Rows with neither contact method
+ * are skipped. Extra columns are ignored silently.
+ *
+ * Idempotent: re-running with the same file updates existing hosts rather
+ * than creating duplicates. Match key:
+ *   - If email present: match on email
+ *   - If no email: match on (name + phone)
+ *
  * Usage:
  *   node scripts/import-hosts.js ./hosts.xlsx
+ *   node scripts/import-hosts.js ./hosts.xlsx --dry-run
  */
 
 require('dotenv').config({ path: '.env.local' });
@@ -13,8 +22,10 @@ const XLSX = require('xlsx');
 const { createClient } = require('@supabase/supabase-js');
 
 const filePath = process.argv[2];
+const dryRun = process.argv.includes('--dry-run');
+
 if (!filePath) {
-  console.error('Usage: node scripts/import-hosts.js <path-to-xlsx>');
+  console.error('Usage: node scripts/import-hosts.js <path-to-xlsx> [--dry-run]');
   process.exit(1);
 }
 
@@ -56,46 +67,137 @@ function cleanPhone(phone) {
   if (!phone) return null;
   const s = String(phone).trim();
   if (!s) return null;
-  // Keep digits, +, and spaces. If it starts with a digit, assume it needs a +
+  // Strip everything that isn't a digit or '+'
   const cleaned = s.replace(/[^\d+]/g, '');
   if (!cleaned) return null;
-  // If no country code, return as-is — coordinator can fix later
-  return cleaned.startsWith('+') ? cleaned : cleaned;
+  return cleaned;
+}
+
+function cleanEmail(email) {
+  if (!email) return null;
+  const s = String(email).trim().toLowerCase();
+  return s || null;
+}
+
+function cleanString(s) {
+  if (s === null || s === undefined) return null;
+  const trimmed = String(s).trim();
+  return trimmed || null;
+}
+
+async function findExistingHost(host) {
+  // Match by email first (most reliable identifier)
+  if (host.email) {
+    const { data } = await supabase
+      .from('hosts')
+      .select('id')
+      .eq('email', host.email)
+      .maybeSingle();
+    if (data) return data;
+  }
+
+  // Fallback: match on (name + phone) for hosts without email
+  if (host.phone) {
+    const { data } = await supabase
+      .from('hosts')
+      .select('id, name, phone')
+      .is('email', null)
+      .eq('phone', host.phone);
+    // Loose name comparison (case-insensitive trim)
+    const match = (data || []).find(
+      (h) => (h.name || '').trim().toLowerCase() === host.name.trim().toLowerCase()
+    );
+    if (match) return match;
+  }
+
+  return null;
 }
 
 async function main() {
   console.log(`Reading ${filePath}...`);
+  if (dryRun) console.log('--- DRY RUN: no database writes ---\n');
+
   const workbook = XLSX.readFile(filePath);
   const sheetName = workbook.SheetNames[0];
   const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
   console.log(`Found ${rows.length} rows in sheet "${sheetName}"`);
 
-  const normalized = rows.map(normalizeRow).filter((r) => r.name && r.email);
-  console.log(`${normalized.length} rows have required fields (name, email)`);
+  // Show what columns we recognized vs ignored
+  if (rows.length > 0) {
+    const firstRowKeys = Object.keys(rows[0]);
+    const lowerKeys = firstRowKeys.map((k) => k.trim().toLowerCase());
+    const recognized = [];
+    const ignored = [];
+    firstRowKeys.forEach((k, i) => {
+      const lower = lowerKeys[i];
+      const matched = Object.values(HEADER_MAP).flat().includes(lower);
+      if (matched) recognized.push(k);
+      else ignored.push(k);
+    });
+    console.log(`Recognized columns: ${recognized.join(', ') || '(none)'}`);
+    if (ignored.length > 0) {
+      console.log(`Ignored columns:    ${ignored.join(', ')}`);
+    }
+  }
 
-  let inserted = 0;
-  let skipped = 0;
-  let updated = 0;
-
-  for (const row of normalized) {
+  // Normalize and validate
+  const skipped = [];
+  const valid = [];
+  rows.forEach((row, idx) => {
+    const n = normalizeRow(row);
     const host = {
-      name: String(row.name).trim(),
-      email: String(row.email).trim().toLowerCase(),
-      phone: cleanPhone(row.phone),
-      capacity: Number.parseInt(row.capacity, 10) || 1,
-      address: row.address ? String(row.address).trim() : null,
-      notes: row.notes ? String(row.notes).trim() : null,
+      name: cleanString(n.name),
+      email: cleanEmail(n.email),
+      phone: cleanPhone(n.phone),
+      capacity: Number.parseInt(n.capacity, 10) || 1,
+      address: cleanString(n.address),
+      notes: cleanString(n.notes),
     };
 
-    // Check if host already exists by email (idempotent re-runs)
-    const { data: existing } = await supabase
-      .from('hosts')
-      .select('id')
-      .eq('email', host.email)
-      .maybeSingle();
+    const reasons = [];
+    if (!host.name) reasons.push('missing name');
+    if (!host.email && !host.phone) reasons.push('missing both email and phone');
+
+    if (reasons.length > 0) {
+      skipped.push({ rowNum: idx + 2, name: host.name || '(blank)', reasons });
+    } else {
+      valid.push(host);
+    }
+  });
+
+  console.log(`\nValid rows: ${valid.length}, Skipped: ${skipped.length}`);
+
+  if (skipped.length > 0) {
+    console.log('\nSkipped rows:');
+    skipped.slice(0, 20).forEach((s) => {
+      console.log(`  Row ${s.rowNum} [${s.name}]: ${s.reasons.join(', ')}`);
+    });
+    if (skipped.length > 20) console.log(`  ... and ${skipped.length - 20} more`);
+  }
+
+  if (dryRun) {
+    console.log('\n--- DRY RUN: would have processed the following ---');
+    valid.slice(0, 5).forEach((h, i) => {
+      console.log(`\n[${i + 1}] ${h.name}`);
+      console.log(`    email:    ${h.email || '(none)'}`);
+      console.log(`    phone:    ${h.phone || '(none)'}`);
+      console.log(`    capacity: ${h.capacity}`);
+      console.log(`    address:  ${h.address ? h.address.slice(0, 50) + (h.address.length > 50 ? '...' : '') : '(none)'}`);
+    });
+    if (valid.length > 5) console.log(`\n... and ${valid.length - 5} more rows`);
+    console.log('\nRun again without --dry-run to actually import.');
+    return;
+  }
+
+  let inserted = 0;
+  let updated = 0;
+  let failed = 0;
+  const errors = [];
+
+  for (const host of valid) {
+    const existing = await findExistingHost(host);
 
     if (existing) {
-      // Update existing record (but don't touch confirmation state)
       const { error } = await supabase
         .from('hosts')
         .update({
@@ -104,29 +206,39 @@ async function main() {
           capacity: host.capacity,
           address: host.address,
           notes: host.notes,
+          // Don't update email here — if existing record had no email and
+          // import row has one, that's a meaningful change worth a separate update.
+          ...(host.email && !existing.email ? { email: host.email } : {}),
         })
         .eq('id', existing.id);
       if (error) {
-        console.error(`  ! Failed to update ${host.email}: ${error.message}`);
-        skipped++;
+        failed++;
+        errors.push(`${host.name} (${host.email || host.phone}): ${error.message}`);
       } else {
         updated++;
       }
     } else {
       const { error } = await supabase.from('hosts').insert(host);
       if (error) {
-        console.error(`  ! Failed to insert ${host.email}: ${error.message}`);
-        skipped++;
+        failed++;
+        errors.push(`${host.name} (${host.email || host.phone}): ${error.message}`);
       } else {
         inserted++;
       }
     }
   }
 
-  console.log('\nDone.');
+  console.log('\n=== Import Summary ===');
   console.log(`  Inserted: ${inserted}`);
   console.log(`  Updated:  ${updated}`);
-  console.log(`  Skipped:  ${skipped}`);
+  console.log(`  Failed:   ${failed}`);
+  console.log(`  Skipped:  ${skipped.length} (see above for reasons)`);
+
+  if (errors.length > 0) {
+    console.log('\nErrors:');
+    errors.slice(0, 10).forEach((e) => console.log(`  ! ${e}`));
+    if (errors.length > 10) console.log(`  ... and ${errors.length - 10} more`);
+  }
 }
 
 main().catch((err) => {

@@ -31,7 +31,7 @@ async function handle(req: NextRequest, token: string) {
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Pause length="2"/>
-  ${safeSay(`Hello ${hostName}, this is the accommodation team for ${eventName}. We were hoping to ask if you might be able to host again this year. Please check your email or text messages for a confirmation link, or contact the event coordinator. Thank you so much, and have a wonderful day.`)}
+  ${safeSay(`Hare Krishna ${hostName}, this is the accommodation team for ${eventName}. We were hoping to ask if you might be able to host any guests this year. Please check your email or text messages for a confirmation link, or contact the event coordinator. Thank you so much, and have a wonderful day.`)}
 </Response>`;
     return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });
   }
@@ -40,11 +40,11 @@ async function handle(req: NextRequest, token: string) {
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Gather numDigits="1" action="${escapeXml(gatherUrl)}" method="POST" timeout="8">
-    ${safeSay(`Hello ${hostName}, this is the accommodation team for ${eventName}. We're getting in touch to ask if you might be able to host again this year.`)}
+    ${safeSay(`Hare Krishna ${hostName}, this is the accommodation team for ${eventName}. We're getting in touch to ask if you might be able to host any guests this year.`)}
     <Pause length="1"/>
     ${say(`If you're able to host, please press one. If you're not able to this year, please press two. To repeat this message, please press nine.`)}
   </Gather>
-  ${say(`I didn't hear a response. We'll follow up by email. Thank you, goodbye.`)}
+  ${say(`I didn't hear a response. We'll follow up again. Thank you, goodbye.`)}
 </Response>`;
   return new NextResponse(twiml, { headers: { 'Content-Type': 'text/xml' } });
 }
