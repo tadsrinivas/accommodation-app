@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     .from('matches')
     .select(`
       id, host_confirm_token, guest_confirm_token, status,
-      hosts(id, name, email, phone),
+      hosts(id, name, email, phone, host_type),
       guests(id, name, email, phone, arrival_date, departure_date, party_size)
     `)
     .eq('status', 'proposed');
@@ -28,37 +28,43 @@ export async function POST(req: NextRequest) {
     const guest = Array.isArray(m.guests) ? m.guests[0] : m.guests;
     if (!host || !guest) continue;
 
-    // Host email
-    const he = matchProposedHostEmail({
-      hostName: host.name,
-      guestName: guest.name,
-      arrival: guest.arrival_date,
-      departure: guest.departure_date,
-      partySize: guest.party_size,
-      token: m.host_confirm_token,
-    });
-    await sendEmail({
-      to: host.email,
-      subject: he.subject,
-      html: he.html,
-      text: he.text,
-      recipientType: 'host',
-      recipientId: host.id,
-      purpose: 'match_proposed',
-    });
+    const isHotel = host.host_type === 'hotel';
 
-    // Host SMS
-    if (host.phone) {
-      await sendSms({
-        to: host.phone,
-        body: matchProposedSms('host', `${siteUrl}/match/host/${m.host_confirm_token}`),
+    // Host notification — skipped for hotels (coordinator handles them
+    // out-of-band and the host_response is already 'accepted'). Also skipped
+    // if host has no email — caught by daily audit instead.
+    if (!isHotel && host.email) {
+      const he = matchProposedHostEmail({
+        hostName: host.name,
+        guestName: guest.name,
+        arrival: guest.arrival_date,
+        departure: guest.departure_date,
+        partySize: guest.party_size,
+        token: m.host_confirm_token,
+      });
+      await sendEmail({
+        to: host.email,
+        subject: he.subject,
+        html: he.html,
+        text: he.text,
         recipientType: 'host',
         recipientId: host.id,
         purpose: 'match_proposed',
       });
+
+      if (host.phone) {
+        await sendSms({
+          to: host.phone,
+          body: matchProposedSms('host', `${siteUrl}/match/host/${m.host_confirm_token}`),
+          recipientType: 'host',
+          recipientId: host.id,
+          purpose: 'match_proposed',
+        });
+      }
     }
 
-    // Guest email
+    // Guest notification — always sent (guest needs to accept regardless of
+    // whether the host is a residence or hotel).
     const ge = matchProposedGuestEmail({
       guestName: guest.name,
       arrival: guest.arrival_date,
@@ -75,7 +81,6 @@ export async function POST(req: NextRequest) {
       purpose: 'match_proposed',
     });
 
-    // Guest SMS
     if (guest.phone) {
       await sendSms({
         to: guest.phone,

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Event Accommodation',
+  title: 'Panihati 2026 Accommodation',
   description: 'Host/Guest coordination',
 };
 

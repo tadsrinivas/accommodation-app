@@ -429,3 +429,36 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+/**
+ * Sent when coordinator reverts (cancels) a saved match. Both parties receive
+ * this so they know the prior pairing is no longer in effect. We avoid blame
+ * language — the email is a simple courtesy notice.
+ */
+export function matchCancelledEmail(args: {
+  recipientName: string;
+  role: 'host' | 'guest';
+}) {
+  const guestText = `Hi ${args.recipientName},
+
+We're writing to let you know the prior accommodation match for ${eventName()} has been cancelled. We're working on finding a different match for you and will be in touch as soon as we have one.
+
+If you have any questions, please reach out to the coordinator.
+
+Thank you for your patience.`;
+
+  const hostText = `Hi ${args.recipientName},
+
+We're writing to let you know the prior guest match for ${eventName()} has been cancelled. You don't need to take any action — we're handling re-matching on our end.
+
+Thank you for your continued willingness to host.`;
+
+  const text = args.role === 'guest' ? guestText : hostText;
+  const html = `<p>${escapeHtml(text).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br/>')}</p>`;
+
+  return {
+    subject: `${eventName()}: Your match has been cancelled`,
+    html,
+    text,
+  };
+}

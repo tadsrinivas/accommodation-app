@@ -82,11 +82,35 @@ export async function generateMatches(): Promise<MatchProposal[]> {
 /** Persist approved match proposals so they can be notified. */
 export async function saveMatches(proposals: MatchProposal[]) {
   if (proposals.length === 0) return { saved: 0 };
-  const rows = proposals.map((p) => ({
-    host_id: p.host_id,
-    guest_id: p.guest_id,
-    status: 'proposed' as const,
-  }));
+
+  // Resolve host_type for each proposed host. Hotel hosts skip the manual
+  // accept step — the coordinator has already arranged the booking out-of-band,
+  // so we mark host_response='accepted' at save time. The guest still
+  // accepts/declines normally, and contacts_exchanged fires when both sides
+  // are accepted (which for hotels means as soon as the guest accepts).
+  const hostIds = Array.from(new Set(proposals.map((p) => p.host_id)));
+  const { data: hostMeta } = await supabaseAdmin
+    .from('hosts')
+    .select('id, host_type')
+    .in('id', hostIds);
+  const hostTypeMap = new Map<string, string>();
+  for (const h of hostMeta || []) {
+    hostTypeMap.set(h.id, h.host_type);
+  }
+
+  const now = new Date().toISOString();
+  const rows = proposals.map((p) => {
+    const isHotel = hostTypeMap.get(p.host_id) === 'hotel';
+    return {
+      host_id: p.host_id,
+      guest_id: p.guest_id,
+      status: 'proposed' as const,
+      // Hotel hosts are pre-accepted on the coordinator's behalf
+      host_response: isHotel ? 'accepted' : null,
+      host_responded_at: isHotel ? now : null,
+    };
+  });
+
   const { error, count } = await supabaseAdmin
     .from('matches')
     .insert(rows, { count: 'exact' });

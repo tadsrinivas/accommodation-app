@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { RemoveConfirmDialog } from '@/components/RemoveConfirmDialog';
 import { RemovedTab } from '@/components/RemovedTab';
 import { EditRecordDialog } from '@/components/EditRecordDialog';
+import { EditMatchDialog } from '@/components/EditMatchDialog';
 
 export default function CoordinatorPage() {
   const [password, setPassword] = useState('');
@@ -46,6 +47,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
   const [hosts, setHosts] = useState<any[]>([]);
   const [removeTarget, setRemoveTarget] = useState<{ type: 'host' | 'guest'; id: string; name: string } | null>(null);
   const [editTarget, setEditTarget] = useState<{ type: 'host' | 'guest'; id: string } | null>(null);
+  const [editMatchTarget, setEditMatchTarget] = useState<{ matchId: string; hostId: string; guestId: string; hostName: string; guestName: string } | null>(null);
   const [pending, setPending] = useState<any[]>([]);
   const [manualList, setManualList] = useState<any[]>([]);
   const [guests, setGuests] = useState<any[]>([]);
@@ -154,6 +156,26 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
     const r = await fetch('/api/notify', { method: 'POST', headers });
     const d = await r.json();
     setStatus(`Notified ${d.notified} match(es).`);
+    loadMatches();
+  }
+
+  async function revertMatch(matchId: string, hostName: string, guestName: string) {
+    const ok = window.confirm(
+      `Revert this match? Both ${hostName} (host) and ${guestName} (guest) will be notified that the match was cancelled.`
+    );
+    if (!ok) return;
+    setStatus('Reverting match...');
+    const r = await fetch(`/api/coordinator/matches/${matchId}`, {
+      method: 'DELETE',
+      headers,
+    });
+    if (!r.ok) {
+      const b = await r.json().catch(() => ({}));
+      setStatus(`Revert failed: ${b.error || 'unknown'}`);
+      return;
+    }
+    const d = await r.json();
+    setStatus(`Match reverted. Notified ${d.notified} parties.`);
     loadMatches();
   }
 
@@ -471,20 +493,48 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
             <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50">
-                  <tr><Th>Host</Th><Th>Guest</Th><Th>Status</Th><Th>Host response</Th><Th>Guest response</Th><Th>Exchanged</Th></tr>
+                  <tr><Th>Host</Th><Th>Guest</Th><Th>Status</Th><Th>Host response</Th><Th>Guest response</Th><Th>Exchanged</Th><Th>Actions</Th></tr>
                 </thead>
                 <tbody>
                   {existing.map((m) => {
                     const host = Array.isArray(m.hosts) ? m.hosts[0] : m.hosts;
                     const guest = Array.isArray(m.guests) ? m.guests[0] : m.guests;
+                    const isCancelled = m.status === 'cancelled';
+                    const canEdit = m.status === 'proposed';
                     return (
                       <tr key={m.id} className="border-t border-slate-100">
                         <Td>{host?.name}</Td>
                         <Td>{guest?.name}</Td>
-                        <Td><Badge color={m.status === 'confirmed' ? 'green' : m.status === 'declined' ? 'slate' : 'amber'}>{m.status}</Badge></Td>
+                        <Td><Badge color={m.status === 'confirmed' ? 'green' : m.status === 'declined' || m.status === 'cancelled' ? 'slate' : 'amber'}>{m.status}</Badge></Td>
                         <Td>{m.host_response || '—'}</Td>
                         <Td>{m.guest_response || '—'}</Td>
                         <Td>{m.contacts_exchanged ? '✓' : '—'}</Td>
+                        <Td>
+                          <div className="flex gap-1">
+                            {canEdit && (
+                              <button
+                                onClick={() => setEditMatchTarget({
+                                  matchId: m.id,
+                                  hostId: m.host_id,
+                                  guestId: m.guest_id,
+                                  hostName: host?.name || '',
+                                  guestName: guest?.name || '',
+                                })}
+                                className="px-2 py-1 text-xs rounded border border-blue-300 text-blue-700 hover:bg-blue-50"
+                              >
+                                Edit
+                              </button>
+                            )}
+                            {!isCancelled && (
+                              <button
+                                onClick={() => revertMatch(m.id, host?.name || '', guest?.name || '')}
+                                className="px-2 py-1 text-xs rounded border border-red-300 text-red-700 hover:bg-red-50"
+                              >
+                                Revert
+                              </button>
+                            )}
+                          </div>
+                        </Td>
                       </tr>
                     );
                   })}
@@ -525,6 +575,23 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
             setStatus('Saved.');
             if (editTarget.type === 'host') loadHosts();
             else loadGuests();
+          }}
+        />
+      )}
+
+      {editMatchTarget && (
+        <EditMatchDialog
+          matchId={editMatchTarget.matchId}
+          currentHostId={editMatchTarget.hostId}
+          currentGuestId={editMatchTarget.guestId}
+          currentHostName={editMatchTarget.hostName}
+          currentGuestName={editMatchTarget.guestName}
+          token={token}
+          onClose={() => setEditMatchTarget(null)}
+          onSaved={() => {
+            setEditMatchTarget(null);
+            setStatus('Match updated. Re-run notifications when ready.');
+            loadMatches();
           }}
         />
       )}
