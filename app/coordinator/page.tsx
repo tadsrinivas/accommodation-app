@@ -5,6 +5,7 @@ import { RemoveConfirmDialog } from '@/components/RemoveConfirmDialog';
 import { RemovedTab } from '@/components/RemovedTab';
 import { EditRecordDialog } from '@/components/EditRecordDialog';
 import { EditMatchDialog } from '@/components/EditMatchDialog';
+import { EditProposalDialog } from '@/components/EditProposalDialog';
 
 export default function CoordinatorPage() {
   const [password, setPassword] = useState('');
@@ -48,6 +49,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
   const [removeTarget, setRemoveTarget] = useState<{ type: 'host' | 'guest'; id: string; name: string } | null>(null);
   const [editTarget, setEditTarget] = useState<{ type: 'host' | 'guest'; id: string } | null>(null);
   const [editMatchTarget, setEditMatchTarget] = useState<{ matchId: string; hostId: string; guestId: string; hostName: string; guestName: string } | null>(null);
+  const [editProposalIndex, setEditProposalIndex] = useState<number | null>(null);
   const [pending, setPending] = useState<any[]>([]);
   const [manualList, setManualList] = useState<any[]>([]);
   const [guests, setGuests] = useState<any[]>([]);
@@ -85,6 +87,16 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
     const d = await r.json();
     setProposals(d.proposals || []);
     setExisting(d.existing || []);
+  }
+
+  async function regenerate() {
+    setStatus('Regenerating proposals...');
+    const r = await fetch('/api/match', { headers });
+    const d = await r.json();
+    const proposalCount = (d.proposals || []).length;
+    setProposals(d.proposals || []);
+    setExisting(d.existing || []);
+    setStatus(`Regenerated. ${proposalCount} proposal${proposalCount === 1 ? '' : 's'} ready.`);
   }
   async function loadIntake() {
     const r = await fetch('/api/voice/intake/sessions', { headers });
@@ -457,7 +469,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
             <div className="flex justify-between items-center mb-3">
               <h2 className="text-lg font-semibold">Proposed matches ({proposals.length})</h2>
               <div className="flex gap-2">
-                <button onClick={loadMatches} className="px-3 py-2 text-sm border border-slate-300 rounded-md">Regenerate</button>
+                <button onClick={regenerate} className="px-3 py-2 text-sm border border-slate-300 rounded-md hover:bg-slate-50">Regenerate</button>
                 <button
                   onClick={approveProposals}
                   disabled={proposals.length === 0}
@@ -471,12 +483,33 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
               <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50">
-                    <tr><Th>Host</Th><Th>Guest</Th><Th>Party</Th><Th>Capacity</Th><Th>Arrival</Th><Th>Departure</Th></tr>
+                    <tr><Th>Host</Th><Th>Guest</Th><Th>Party</Th><Th>Capacity</Th><Th>Arrival</Th><Th>Departure</Th><Th>Actions</Th></tr>
                   </thead>
                   <tbody>
                     {proposals.map((p, i) => (
                       <tr key={i} className="border-t border-slate-100">
                         <Td>{p.host_name}</Td><Td>{p.guest_name}</Td><Td>{p.party_size}</Td><Td>{p.capacity}</Td><Td>{p.arrival}</Td><Td>{p.departure}</Td>
+                        <Td>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => setEditProposalIndex(i)}
+                              className="px-2 py-1 text-xs rounded border border-blue-300 text-blue-700 hover:bg-blue-50"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`Drop this proposal? ${p.host_name} ↔ ${p.guest_name}`)) {
+                                  setProposals(proposals.filter((_, idx) => idx !== i));
+                                  setStatus('Proposal dropped. Click Regenerate or Save all when ready.');
+                                }
+                              }}
+                              className="px-2 py-1 text-xs rounded border border-red-300 text-red-700 hover:bg-red-50"
+                            >
+                              Drop
+                            </button>
+                          </div>
+                        </Td>
                       </tr>
                     ))}
                   </tbody>
@@ -592,6 +625,51 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
             setEditMatchTarget(null);
             setStatus('Match updated. Re-run notifications when ready.');
             loadMatches();
+          }}
+        />
+      )}
+
+      {editProposalIndex !== null && proposals[editProposalIndex] && (
+        <EditProposalDialog
+          currentHostId={proposals[editProposalIndex].host_id}
+          currentGuestId={proposals[editProposalIndex].guest_id}
+          currentHostName={proposals[editProposalIndex].host_name}
+          currentGuestName={proposals[editProposalIndex].guest_name}
+          token={token}
+          onClose={() => setEditProposalIndex(null)}
+          onSaved={(newHostId, newGuestId, newHost, newGuest) => {
+            // Detect conflicts with other proposals in the local list — can't
+            // double-book a host or guest in the same batch.
+            const conflictsWithHost = proposals.some(
+              (p, idx) => idx !== editProposalIndex && p.host_id === newHostId
+            );
+            const conflictsWithGuest = proposals.some(
+              (p, idx) => idx !== editProposalIndex && p.guest_id === newGuestId
+            );
+            if (conflictsWithHost) {
+              setStatus(`Cannot save: ${newHost.name} is already in another proposal in this batch. Drop the other one first.`);
+              return;
+            }
+            if (conflictsWithGuest) {
+              setStatus(`Cannot save: ${newGuest.name} is already in another proposal in this batch. Drop the other one first.`);
+              return;
+            }
+
+            const updated = [...proposals];
+            updated[editProposalIndex] = {
+              ...updated[editProposalIndex],
+              host_id: newHostId,
+              host_name: newHost.name,
+              capacity: newHost.capacity,
+              guest_id: newGuestId,
+              guest_name: newGuest.name,
+              party_size: newGuest.party_size,
+              arrival: newGuest.arrival_date,
+              departure: newGuest.departure_date,
+            };
+            setProposals(updated);
+            setEditProposalIndex(null);
+            setStatus(`Proposal updated. Click Save all when ready.`);
           }}
         />
       )}
