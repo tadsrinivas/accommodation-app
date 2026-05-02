@@ -38,6 +38,7 @@ export type HostSignup = z.infer<typeof HostSignupSchema>;
 // ----------------------------------------------------------------
 export const HostEditSchema = z.object({
   name: z.string().min(2).max(200),
+  email: z.string().email('Please enter a valid email').optional(),
   phone: z.string().min(7, 'Please enter a valid phone number').max(30),
   capacity: z.coerce.number().int().min(1).max(30),
   address: z.string().min(5, 'Please enter your address').max(500),

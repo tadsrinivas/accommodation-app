@@ -69,7 +69,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
           emailSubject: tpl.subject,
           emailHtml: tpl.html,
           emailText: tpl.text,
-          smsBody: withSmsPrefix(`Thanks for confirming you can host! Manage your profile: ${editLink}`),
+          smsBody: withSmsPrefix(`Thanks for confirming you can host! Please follow this link to complete signup: ${editLink}`),
           recipientType: 'host',
           recipientId: existing.id,
           purpose: 'reconfirmed_welcome',

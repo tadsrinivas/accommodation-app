@@ -117,15 +117,37 @@ export async function PUT(req: NextRequest, { params }: { params: { token: strin
   }
 
   const data = parsed.data;
+
+  // Look up existing record to enforce the email-change rule:
+  // hosts can set their email only when it was empty. If the existing email
+  // is set, any email field in the request is ignored (and we never error
+  // out — silent server-side enforcement is friendlier than rejection).
+  const { data: existing } = await supabaseAdmin
+    .from('hosts')
+    .select('email')
+    .eq('confirm_token', params.token)
+    .single();
+
+  if (!existing) {
+    return NextResponse.json({ error: 'Invalid link' }, { status: 400 });
+  }
+
+  const update: Record<string, any> = {
+    name: data.name.trim(),
+    phone: data.phone || null,
+    capacity: data.capacity,
+    address: data.address?.trim() || null,
+    notes: data.notes?.trim() || null,
+  };
+
+  // Only honor email change when the existing record has no email
+  if (!existing.email && data.email) {
+    update.email = data.email.trim().toLowerCase();
+  }
+
   const { data: updated, error } = await supabaseAdmin
     .from('hosts')
-    .update({
-      name: data.name.trim(),
-      phone: data.phone || null,
-      capacity: data.capacity,
-      address: data.address?.trim() || null,
-      notes: data.notes?.trim() || null,
-    })
+    .update(update)
     .eq('confirm_token', params.token)
     .select('id, name, email, phone, capacity, address, notes')
     .single();

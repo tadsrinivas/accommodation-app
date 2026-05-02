@@ -17,6 +17,11 @@ export default function HostEditPage() {
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
 
+  // Email is locked once set — hosts can't change it themselves (identity anchor,
+  // import duplication, retrieval flow, takeover defense). But if email is empty
+  // (imported host without one), they can — and must — fill it in.
+  const [emailWasEmpty, setEmailWasEmpty] = useState(false);
+
   useEffect(() => {
     fetch(`/api/hosts/${token}`)
       .then((r) => r.json().then((d) => ({ status: r.status, body: d })))
@@ -28,6 +33,7 @@ export default function HostEditPage() {
         const h = body.host;
         setName(h.name || '');
         setEmail(h.email || '');
+        setEmailWasEmpty(!h.email);
         setPhone(h.phone || '');
         setCapacity(h.capacity || 1);
         setAddress(h.address || '');
@@ -41,10 +47,17 @@ export default function HostEditPage() {
     setError(null);
     setSaving(true);
 
+    const payload: any = { name, phone, capacity, address, notes };
+    // Only allow email change when it was originally empty.
+    // Server enforces the same rule — this is just to avoid sending unnecessary data.
+    if (emailWasEmpty) {
+      payload.email = email;
+    }
+
     const res = await fetch(`/api/hosts/${token}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, phone, capacity, address, notes }),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     setSaving(false);
@@ -71,19 +84,33 @@ export default function HostEditPage() {
     <div className="max-w-lg mx-auto bg-white rounded-lg border border-slate-200 p-6 mt-6">
       <h1 className="text-2xl font-semibold mb-1">Manage your hosting profile</h1>
       <p className="text-sm text-slate-600 mb-6">
-        Update your details anytime. Your email is locked — contact the coordinator to change it.
+        {emailWasEmpty
+          ? "Update your details below. Please add your email so we can contact you about hosting."
+          : "Update your details anytime. Your email is locked — contact the coordinator to change it."}
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <Field label="Name" value={name} onChange={setName} required />
         <div>
-          <label className="block text-sm font-medium mb-1">Email</label>
-          <input
-            type="email"
-            value={email}
-            disabled
-            className="w-full px-3 py-2 border border-slate-200 bg-slate-50 rounded-md text-sm text-slate-500"
-          />
+          <label className="block text-sm font-medium mb-1">
+            Email{emailWasEmpty && <span className="text-red-600 ml-0.5">*</span>}
+          </label>
+          {emailWasEmpty ? (
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
+            />
+          ) : (
+            <input
+              type="email"
+              value={email}
+              disabled
+              className="w-full px-3 py-2 border border-slate-200 bg-slate-50 rounded-md text-sm text-slate-500"
+            />
+          )}
         </div>
         <Field label="Phone" type="tel" value={phone} onChange={setPhone} required />
         <div>
