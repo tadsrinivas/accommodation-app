@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/outreach/run",
-      "schedule": "0 14 * * *"
+      "schedule": "0 16 * * *"
     },
     {
       "path": "/api/coordinator/audit/digest",
