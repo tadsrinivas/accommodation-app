@@ -193,7 +193,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
 
   return (
     <div className="space-y-4">
-      <header className="flex items-center justify-between">
+      <header className="flex items-center justify-between gap-2 flex-wrap">
         <h1 className="text-2xl font-semibold">Coordinator dashboard</h1>
         <div className="flex items-center gap-4">
           <a href="/coordinator/audit" className="text-sm text-amber-700 hover:text-amber-900 underline">
@@ -203,12 +203,12 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
         </div>
       </header>
 
-      <nav className="flex gap-2 border-b border-slate-200">
+      <nav className="flex gap-2 border-b border-slate-200 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
         {(['hosts', 'outreach', 'guests', 'intake', 'matches', 'removed'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 ${
+            className={`px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap shrink-0 ${
               tab === t ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-600'
             }`}
           >
@@ -230,8 +230,8 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
               <h2 className="text-lg font-semibold mb-2">
                 Pending approvals <Badge color="amber">{pending.length}</Badge>
               </h2>
-              <div className="bg-white border border-amber-200 rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
+              <div className="bg-white border border-amber-200 rounded-lg overflow-x-auto">
+                <table className="w-full text-sm min-w-[800px]">
                   <thead className="bg-amber-50">
                     <tr>
                       <Th>Name</Th><Th>Email</Th><Th>Phone</Th><Th>Cap</Th><Th>Address</Th><Th>Notes</Th><Th>Submitted</Th><Th>Actions</Th>
@@ -268,8 +268,8 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
               {hosts.filter((h) => h.confirmed_available === false).length} declined, {' '}
               {hosts.filter((h) => h.confirmed_available === null).length} awaiting.
             </p>
-            <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+              <table className="w-full text-sm min-w-[800px]">
                 <thead className="bg-slate-50">
                   <tr>
                     <Th>Name</Th><Th>Email</Th><Th>Phone</Th><Th>Capacity</Th><Th>Status</Th><Th>Approval</Th><Th>Source</Th><Th>Actions</Th>
@@ -348,8 +348,8 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
             {manualList.length === 0 ? (
               <p className="text-sm text-slate-500 italic">None right now.</p>
             ) : (
-              <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
+              <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+                <table className="w-full text-sm min-w-[800px]">
                   <thead className="bg-slate-50">
                     <tr>
                       <Th>Name</Th><Th>Phone</Th><Th>Email</Th><Th>SMS</Th><Th>Email</Th><Th>Voice</Th><Th>Last call</Th><Th>Actions</Th>
@@ -387,8 +387,8 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
       {tab === 'guests' && (
         <section className="space-y-3">
           <p className="text-sm text-slate-600">{guests.length} guest request(s).</p>
-          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+            <table className="w-full text-sm min-w-[800px]">
               <thead className="bg-slate-50">
                 <tr>
                   <Th>Name</Th><Th>Email</Th><Th>Arrival</Th><Th>Departure</Th><Th>Party</Th><Th>Notes</Th><Th>Actions</Th>
@@ -428,8 +428,8 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
             {intakeSessions.length} voice intake session(s). Sessions move through:
             <span className="text-xs"> started → collecting → sms_sent → completed.</span>
           </p>
-          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+            <table className="w-full text-sm min-w-[800px]">
               <thead className="bg-slate-50">
                 <tr>
                   <Th>Caller</Th><Th>Phone</Th><Th>Arrival</Th><Th>Departure</Th><Th>Party</Th><Th>Step</Th><Th>Started</Th><Th>Result</Th>
@@ -466,7 +466,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
       {tab === 'matches' && (
         <section className="space-y-6">
           <div>
-            <div className="flex justify-between items-center mb-3">
+            <div className="flex justify-between items-center mb-3 gap-2 flex-wrap">
               <h2 className="text-lg font-semibold">Proposed matches ({proposals.length})</h2>
               <div className="flex gap-2">
                 <button onClick={regenerate} className="px-3 py-2 text-sm border border-slate-300 rounded-md hover:bg-slate-50">Regenerate</button>
@@ -480,8 +480,8 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
             {proposals.length === 0 ? (
               <p className="text-sm text-slate-500 italic">No new matches.</p>
             ) : (
-              <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
+              <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+                <table className="w-full text-sm min-w-[800px]">
                   <thead className="bg-slate-50">
                     <tr><Th>Host</Th><Th>Guest</Th><Th>Party</Th><Th>Capacity</Th><Th>Arrival</Th><Th>Departure</Th><Th>Actions</Th></tr>
                   </thead>
@@ -519,12 +519,12 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
           </div>
 
           <div>
-            <div className="flex justify-between items-center mb-3">
+            <div className="flex justify-between items-center mb-3 gap-2 flex-wrap">
               <h2 className="text-lg font-semibold">Saved matches ({existing.length})</h2>
               <button onClick={notifyAll} className="px-4 py-2 bg-green-600 text-white text-sm rounded-md font-medium hover:bg-green-700">Notify all proposed matches</button>
             </div>
-            <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+              <table className="w-full text-sm min-w-[800px]">
                 <thead className="bg-slate-50">
                   <tr><Th>Host</Th><Th>Guest</Th><Th>Status</Th><Th>Host response</Th><Th>Guest response</Th><Th>Exchanged</Th><Th>Actions</Th></tr>
                 </thead>
@@ -732,7 +732,7 @@ function OutreachStats({ hosts }: { hosts: any[] }) {
   return (
     <div className="bg-white border border-slate-200 rounded-lg p-4">
       <h3 className="text-sm font-semibold text-slate-700 mb-3">Pipeline by stage</h3>
-      <div className="grid grid-cols-7 gap-2">
+      <div className="grid grid-cols-3 sm:grid-cols-7 gap-2">
         {counts.map((c) => (
           <div key={c.stage} className="text-center">
             <div className="text-2xl font-semibold">{c.count}</div>
@@ -745,7 +745,7 @@ function OutreachStats({ hosts }: { hosts: any[] }) {
 }
 
 function Th({ children }: { children: React.ReactNode }) {
-  return <th className="text-left px-3 py-2 font-medium text-slate-600">{children}</th>;
+  return <th className="text-left px-3 py-2 font-medium text-slate-600 whitespace-nowrap">{children}</th>;
 }
 function Td({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return <td className={`px-3 py-2 ${className}`}>{children}</td>;

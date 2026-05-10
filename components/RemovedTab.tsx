@@ -119,19 +119,19 @@ export function RemovedTab({ token }: { token: string }) {
 
       <section>
         <h3 className="text-md font-semibold mb-2">Removed hosts ({hosts.length})</h3>
-        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
           {hosts.length === 0 ? (
             <p className="p-6 text-center text-sm text-slate-500">No removed hosts.</p>
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[700px]">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Name</th>
-                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Email</th>
-                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Capacity</th>
-                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Removed</th>
-                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">By</th>
-                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Actions</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600 whitespace-nowrap">Name</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600 whitespace-nowrap">Email</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600 whitespace-nowrap">Capacity</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600 whitespace-nowrap">Removed</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600 whitespace-nowrap">By</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600 whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -168,20 +168,20 @@ export function RemovedTab({ token }: { token: string }) {
 
       <section>
         <h3 className="text-md font-semibold mb-2">Removed guests ({guests.length})</h3>
-        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
           {guests.length === 0 ? (
             <p className="p-6 text-center text-sm text-slate-500">No removed guests.</p>
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[800px]">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Name</th>
-                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Email</th>
-                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Dates</th>
-                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Party</th>
-                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Removed</th>
-                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">By</th>
-                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">Actions</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600 whitespace-nowrap">Name</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600 whitespace-nowrap">Email</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600 whitespace-nowrap">Dates</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600 whitespace-nowrap">Party</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600 whitespace-nowrap">Removed</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600 whitespace-nowrap">By</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-slate-600 whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -189,7 +189,7 @@ export function RemovedTab({ token }: { token: string }) {
                   <tr key={g.id} className="border-t border-slate-100">
                     <td className="px-3 py-2">{g.name}</td>
                     <td className="px-3 py-2 text-xs">{g.email || '—'}</td>
-                    <td className="px-3 py-2 text-xs">
+                    <td className="px-3 py-2 text-xs whitespace-nowrap">
                       {g.arrival_date} → {g.departure_date}
                     </td>
                     <td className="px-3 py-2">{g.party_size}</td>
