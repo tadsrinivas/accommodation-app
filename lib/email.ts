@@ -15,12 +15,19 @@ interface SendEmailArgs {
 
 export async function sendEmail(args: SendEmailArgs) {
   try {
+    // Optional EMAIL_REPLY_TO: when set, recipients hitting Reply send their
+    // reply to this address instead of EMAIL_FROM. Useful when the verified
+    // sending domain (e.g., mail.yourdomain.com) is unmonitored but you want
+    // replies to land in a real inbox (e.g., coordinator@yourdomain.com).
+    const replyTo = process.env.EMAIL_REPLY_TO;
+
     const result = await resend.emails.send({
       from: process.env.EMAIL_FROM!,
       to: args.to,
       subject: args.subject,
       html: args.html,
       text: args.text,
+      ...(replyTo ? { replyTo } : {}),
     });
 
     await supabaseAdmin.from('notifications').insert({
@@ -345,6 +352,34 @@ export function hostReconfirmedEmail(host: { name: string; confirm_token: string
       <p>We'll be in touch when we have a guest match for you.</p>
     `,
     text: `Hi ${host.name}, thanks for confirming you can host for ${eventName()}! Manage your profile: ${editLink}. We'll be in touch when we have a guest match.`,
+  };
+}
+
+/**
+ * Confirmation email sent immediately after a guest submits the public
+ * intake form. Confirms their details and tells them what happens next.
+ */
+export function guestIntakeReceivedEmail(args: {
+  guestName: string;
+  arrivalDate: string;
+  departureDate: string;
+  partySize: number;
+}) {
+  return {
+    subject: `${eventName()}: We've received your accommodation request`,
+    html: `
+      <p>Hi ${args.guestName},</p>
+      <p>Thank you for submitting your accommodation request for <strong>${eventName()}</strong>. We've received your details:</p>
+      <ul>
+        <li><strong>Arrival:</strong> ${args.arrivalDate}</li>
+        <li><strong>Departure:</strong> ${args.departureDate}</li>
+        <li><strong>Party size:</strong> ${args.partySize}</li>
+      </ul>
+      <p>A coordinator will match you with a host and reach out with your host's details. You don't need to do anything else for now.</p>
+      <p>If you need to make changes or have questions, please contact the coordinator.</p>
+      <p>Thank you!</p>
+    `,
+    text: `Hi ${args.guestName}, thanks for submitting your accommodation request for ${eventName()}. We've recorded: arrival ${args.arrivalDate}, departure ${args.departureDate}, party of ${args.partySize}. A coordinator will match you with a host and reach out. Thank you!`,
   };
 }
 

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { GuestFormSchema } from '@/lib/validation';
 import { requireCoordinator } from '@/lib/auth';
+import { notifyBoth } from '@/lib/notify';
+import { guestIntakeReceivedEmail } from '@/lib/email';
+import { smsBody as withSmsPrefix } from '@/lib/sms';
 
 // Public: guest form submission
 export async function POST(req: NextRequest) {
@@ -31,6 +34,31 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Send intake confirmation via email + SMS in parallel. If either channel
+  // fails, the guest's record is still successfully created — we just log
+  // the failure to the notifications table and return ok.
+  const tpl = guestIntakeReceivedEmail({
+    guestName: g.name,
+    arrivalDate: g.arrival_date,
+    departureDate: g.departure_date,
+    partySize: g.party_size,
+  });
+
+  await notifyBoth({
+    email: g.email,
+    phone: g.phone || null,
+    emailSubject: tpl.subject,
+    emailHtml: tpl.html,
+    emailText: tpl.text,
+    smsBody: withSmsPrefix(
+      `We've received your accommodation request for ${g.arrival_date} to ${g.departure_date}. A coordinator will match you with a host and reach out.`
+    ),
+    recipientType: 'guest',
+    recipientId: data.id,
+    purpose: 'intake_received',
+  });
+
   return NextResponse.json({ ok: true, guest_id: data.id });
 }
 
