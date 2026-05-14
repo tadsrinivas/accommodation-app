@@ -691,6 +691,8 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
     </div>
   );
 }
+
+function OutreachConfigSummary({ token }: { token: string }) {
   const [cfg, setCfg] = useState<{ delay_days: number; sequence: string[] } | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -753,55 +755,6 @@ function OutreachStats({ hosts }: { hosts: any[] }) {
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-function OutreachConfigSummary({ token }: { token: string }) {
-  const [cfg, setCfg] = useState<{ delay_days: number; sequence: string[] } | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch('/api/outreach/config', { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.json())
-      .then((d) => { if (d.error) setErr(d.error); else setCfg(d); })
-      .catch((e) => setErr(String(e)));
-  }, [token]);
-
-  if (err) return <p className="text-sm text-red-600">Couldn&apos;t load config: {err}</p>;
-  if (!cfg) return <p className="text-sm text-slate-500">Loading config...</p>;
-
-  const channelLabel: Record<string, string> = {
-    'sms': 'SMS',
-    'email': 'email',
-    'sms+email': 'SMS + email',
-    'voice': 'voice call',
-  };
-
-  return (
-    <div className="text-sm text-slate-700 space-y-1">
-      <p>
-        <span className="font-medium">Delay between stages:</span> {cfg.delay_days} day{cfg.delay_days === 1 ? '' : 's'}
-      </p>
-      <p>
-        <span className="font-medium">Sequence:</span>{' '}
-        {cfg.sequence.map((c, i) => (
-          <span key={i}>
-            {i > 0 && <span className="text-slate-400 mx-1">→</span>}
-            <span className="inline-block px-2 py-0.5 bg-slate-100 rounded text-xs">
-              Day {i * cfg.delay_days}: {channelLabel[c] || c}
-            </span>
-          </span>
-        ))}
-        <span className="text-slate-400 mx-1">→</span>
-        <span className="inline-block px-2 py-0.5 bg-amber-100 text-amber-800 rounded text-xs">
-          Day {cfg.sequence.length * cfg.delay_days}: manual call
-        </span>
-      </p>
-      <p className="text-xs text-slate-500 pt-1">
-        Configured via <code className="bg-slate-100 px-1 rounded">OUTREACH_STAGE_DELAY_DAYS</code> and{' '}
-        <code className="bg-slate-100 px-1 rounded">OUTREACH_CHANNEL_SEQUENCE</code> env vars. Restart the server after changing.
-      </p>
     </div>
   );
 }
