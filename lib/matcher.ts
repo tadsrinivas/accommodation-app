@@ -1,4 +1,5 @@
 import { supabaseAdmin } from './supabase';
+import { getCapacityUsage } from './capacity';
 
 export interface MatchProposal {
   host_id: string;
@@ -12,14 +13,21 @@ export interface MatchProposal {
 }
 
 /**
- * Simple greedy matcher.
+ * Greedy matcher with multi-guest support.
+ *
  * Rules:
- *   - Host must have confirmed_available = true
- *   - Host capacity >= guest party_size
- *   - Host not already assigned to a non-declined match
+ *   - Host must have confirmed_available = true, approved, uncancelled
+ *   - Host must have REMAINING capacity >= guest party_size
+ *     (capacity - sum of party_size of already-matched guests)
  *   - Larger parties get matched first (they're hardest to place)
- * Returns proposed matches without persisting them.
- * The coordinator reviews & approves before anyone is notified.
+ *   - Best-fit: among hosts that fit, pick the one with smallest *remaining*
+ *     capacity (minimizes leftover space waste)
+ *
+ * Within a single batch run, the matcher decrements an in-memory copy of
+ * remaining capacity as it allocates, so two guests can land at the same
+ * host if capacity allows.
+ *
+ * Returns proposals without persisting. Coordinator reviews and approves.
  */
 export async function generateMatches(): Promise<MatchProposal[]> {
   const { data: hosts, error: hostErr } = await supabaseAdmin
@@ -39,31 +47,40 @@ export async function generateMatches(): Promise<MatchProposal[]> {
 
   if (guestErr) throw guestErr;
 
-  // Exclude hosts & guests already in a non-declined match
+  // Guests already in a non-declined match are excluded (a guest belongs to
+  // exactly one host). Host capacity_usage is computed separately so a single
+  // host can still appear in the candidate pool with remaining capacity.
   const { data: existing } = await supabaseAdmin
     .from('matches')
-    .select('host_id, guest_id, status')
+    .select('guest_id')
     .neq('status', 'declined')
     .neq('status', 'cancelled');
 
-  const takenHosts = new Set((existing || []).map((m) => m.host_id));
   const takenGuests = new Set((existing || []).map((m) => m.guest_id));
-
-  const availableHosts = (hosts || []).filter((h) => !takenHosts.has(h.id));
   const unmatchedGuests = (guests || []).filter((g) => !takenGuests.has(g.id));
 
+  // Compute used capacity per host from the DB, then we'll decrement an
+  // in-memory copy as we allocate within this batch.
+  const hostIds = (hosts || []).map((h) => h.id);
+  const dbUsage = await getCapacityUsage(hostIds);
+  const remaining = new Map<string, number>();
+  for (const h of hosts || []) {
+    remaining.set(h.id, h.capacity - (dbUsage.get(h.id) || 0));
+  }
+
   const proposals: MatchProposal[] = [];
-  const usedHosts = new Set<string>();
 
   for (const guest of unmatchedGuests) {
-    // Find smallest-capacity host that still fits the party (best-fit)
-    const candidate = availableHosts
-      .filter((h) => !usedHosts.has(h.id) && h.capacity >= guest.party_size)
-      .sort((a, b) => a.capacity - b.capacity)[0];
+    // Best-fit among hosts whose remaining capacity fits this party
+    const candidate = (hosts || [])
+      .filter((h) => (remaining.get(h.id) || 0) >= guest.party_size)
+      .sort((a, b) => (remaining.get(a.id) || 0) - (remaining.get(b.id) || 0))[0];
 
     if (!candidate) continue;
 
-    usedHosts.add(candidate.id);
+    // Decrement the in-memory remaining so future iterations see the update
+    remaining.set(candidate.id, (remaining.get(candidate.id) || 0) - guest.party_size);
+
     proposals.push({
       host_id: candidate.id,
       guest_id: guest.id,
@@ -105,7 +122,6 @@ export async function saveMatches(proposals: MatchProposal[]) {
       host_id: p.host_id,
       guest_id: p.guest_id,
       status: 'proposed' as const,
-      // Hotel hosts are pre-accepted on the coordinator's behalf
       host_response: isHotel ? 'accepted' : null,
       host_responded_at: isHotel ? now : null,
     };

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { requireCoordinator } from '@/lib/auth';
 import { sendEmail, matchCancelledEmail } from '@/lib/email';
+import { getCapacityUsage } from '@/lib/capacity';
 import { z } from 'zod';
 
 /**
@@ -13,6 +14,7 @@ import { z } from 'zod';
 const EditSchema = z.object({
   host_id: z.string().uuid().optional(),
   guest_id: z.string().uuid().optional(),
+  allow_overcapacity: z.boolean().optional().default(false),
 });
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
@@ -44,19 +46,20 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
   const newHostId = parsed.data.host_id ?? match.host_id;
   const newGuestId = parsed.data.guest_id ?? match.guest_id;
+  const allowOver = parsed.data.allow_overcapacity;
 
   if (newHostId === match.host_id && newGuestId === match.guest_id) {
     return NextResponse.json({ error: 'Nothing changed' }, { status: 400 });
   }
 
-  // Pre-flight: does this (host, guest) pair already have a match?
-  // The unique(host_id, guest_id) constraint will reject the update otherwise.
+  // Collision check: does this (host, guest) pair already have a non-cancelled match?
   const { data: collision } = await supabaseAdmin
     .from('matches')
     .select('id, status')
     .eq('host_id', newHostId)
     .eq('guest_id', newGuestId)
     .neq('id', match.id)
+    .neq('status', 'cancelled')
     .maybeSingle();
 
   if (collision) {
@@ -66,9 +69,49 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     );
   }
 
-  // If the new host is a hotel, auto-accept on host side. Otherwise reset
-  // host_response since this is now a different pairing.
-  let updates: Record<string, any> = {
+  // Capacity check — load new host and guest to compute
+  const [newHostData, newGuestData] = await Promise.all([
+    supabaseAdmin.from('hosts').select('id, capacity, host_type').eq('id', newHostId).maybeSingle(),
+    supabaseAdmin.from('guests').select('id, party_size').eq('id', newGuestId).maybeSingle(),
+  ]);
+
+  if (!newHostData.data) return NextResponse.json({ error: 'New host not found' }, { status: 404 });
+  if (!newGuestData.data) return NextResponse.json({ error: 'New guest not found' }, { status: 404 });
+
+  // Compute capacity excluding the current match's contribution
+  const usage = await getCapacityUsage([newHostId]);
+  let used = usage.get(newHostId) || 0;
+  if (newHostId === match.host_id) {
+    // The match we're editing already contributes to usage — subtract it back out
+    const { data: currentGuest } = await supabaseAdmin
+      .from('guests')
+      .select('party_size')
+      .eq('id', match.guest_id)
+      .maybeSingle();
+    if (currentGuest) {
+      used = Math.max(0, used - currentGuest.party_size);
+    }
+  }
+  const remaining = newHostData.data.capacity - used;
+  const overBy = newGuestData.data.party_size - remaining;
+
+  if (overBy > 0 && !allowOver) {
+    return NextResponse.json(
+      {
+        error: 'overcapacity',
+        message: `New host has ${remaining} remaining capacity (out of ${newHostData.data.capacity}). New guest party would exceed by ${overBy}.`,
+        host_capacity: newHostData.data.capacity,
+        host_used: used,
+        host_remaining: remaining,
+        guest_party_size: newGuestData.data.party_size,
+        over_by: overBy,
+      },
+      { status: 409 }
+    );
+  }
+
+  // Build the update. Reset responses since the pairing changed.
+  const updates: Record<string, any> = {
     host_id: newHostId,
     guest_id: newGuestId,
     host_response: null,
@@ -77,16 +120,9 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     guest_responded_at: null,
   };
 
-  if (newHostId !== match.host_id) {
-    const { data: newHost } = await supabaseAdmin
-      .from('hosts')
-      .select('host_type')
-      .eq('id', newHostId)
-      .maybeSingle();
-    if (newHost?.host_type === 'hotel') {
-      updates.host_response = 'accepted';
-      updates.host_responded_at = new Date().toISOString();
-    }
+  if (newHostId !== match.host_id && newHostData.data.host_type === 'hotel') {
+    updates.host_response = 'accepted';
+    updates.host_responded_at = new Date().toISOString();
   }
 
   const { error } = await supabaseAdmin
@@ -94,18 +130,21 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     .update(updates)
     .eq('id', match.id);
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ ok: true, host_id: newHostId, guest_id: newGuestId });
+  return NextResponse.json({
+    ok: true,
+    host_id: newHostId,
+    guest_id: newGuestId,
+    overcapacity: overBy > 0,
+    over_by: Math.max(0, overBy),
+  });
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const auth = requireCoordinator(req);
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 });
 
-  // Load match with both parties for the cancellation emails
   const { data: match } = await supabaseAdmin
     .from('matches')
     .select(`
@@ -121,7 +160,6 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     return NextResponse.json({ error: 'Match is already cancelled' }, { status: 400 });
   }
 
-  // Mark as cancelled
   const { error } = await supabaseAdmin
     .from('matches')
     .update({ status: 'cancelled', contacts_exchanged: false })
@@ -132,9 +170,6 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   const host = Array.isArray(match.hosts) ? match.hosts[0] : match.hosts;
   const guest = Array.isArray(match.guests) ? match.guests[0] : match.guests;
 
-  // Send cancellation emails. Hotel hosts skipped (out-of-band relationship).
-  // Hosts without email are also silently skipped — they'll see it in the
-  // dashboard. Daily audit will catch missing notifications.
   let notified = 0;
   if (host && host.email && host.host_type !== 'hotel') {
     const tpl = matchCancelledEmail({ recipientName: host.name, role: 'host' });

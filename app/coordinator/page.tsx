@@ -6,6 +6,7 @@ import { RemovedTab } from '@/components/RemovedTab';
 import { EditRecordDialog } from '@/components/EditRecordDialog';
 import { EditMatchDialog } from '@/components/EditMatchDialog';
 import { EditProposalDialog } from '@/components/EditProposalDialog';
+import { ManualMatchDialog } from '@/components/ManualMatchDialog';
 
 export default function CoordinatorPage() {
   const [password, setPassword] = useState('');
@@ -50,6 +51,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
   const [editTarget, setEditTarget] = useState<{ type: 'host' | 'guest'; id: string } | null>(null);
   const [editMatchTarget, setEditMatchTarget] = useState<{ matchId: string; hostId: string; guestId: string; hostName: string; guestName: string } | null>(null);
   const [editProposalIndex, setEditProposalIndex] = useState<number | null>(null);
+  const [showManualMatch, setShowManualMatch] = useState(false);
   const [pending, setPending] = useState<any[]>([]);
   const [manualList, setManualList] = useState<any[]>([]);
   const [guests, setGuests] = useState<any[]>([]);
@@ -288,7 +290,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
                       </Td>
                       <Td className="text-xs">{h.email}</Td>
                       <Td className="text-xs">{h.phone || '—'}</Td>
-                      <Td>{h.capacity}</Td>
+                      <Td>{h.used_capacity ?? 0}/{h.capacity}</Td>
                       <Td>
                         {h.confirmed_available === true && <Badge color="green">Available</Badge>}
                         {h.confirmed_available === false && <Badge color="slate">Declined</Badge>}
@@ -468,7 +470,8 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
           <div>
             <div className="flex justify-between items-center mb-3 gap-2 flex-wrap">
               <h2 className="text-lg font-semibold">Proposed matches ({proposals.length})</h2>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                <button onClick={() => setShowManualMatch(true)} className="px-3 py-2 text-sm border border-blue-600 text-blue-700 rounded-md hover:bg-blue-50 font-medium">+ Add manual match</button>
                 <button onClick={regenerate} className="px-3 py-2 text-sm border border-slate-300 rounded-md hover:bg-slate-50">Regenerate</button>
                 <button
                   onClick={approveProposals}
@@ -673,11 +676,21 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
           }}
         />
       )}
+      {showManualMatch && (
+        <ManualMatchDialog
+          token={token}
+          onClose={() => setShowManualMatch(false)}
+          onCreated={(hostName, guestName) => {
+            setShowManualMatch(false);
+            setStatus(`Manual match created: ${hostName} ↔ ${guestName}. Click "Notify all proposed matches" to email both parties.`);
+            loadMatches();
+            loadHosts();
+          }}
+        />
+      )}
     </div>
   );
 }
-
-function OutreachConfigSummary({ token }: { token: string }) {
   const [cfg, setCfg] = useState<{ delay_days: number; sequence: string[] } | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -740,6 +753,55 @@ function OutreachStats({ hosts }: { hosts: any[] }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function OutreachConfigSummary({ token }: { token: string }) {
+  const [cfg, setCfg] = useState<{ delay_days: number; sequence: string[] } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/outreach/config', { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((d) => { if (d.error) setErr(d.error); else setCfg(d); })
+      .catch((e) => setErr(String(e)));
+  }, [token]);
+
+  if (err) return <p className="text-sm text-red-600">Couldn&apos;t load config: {err}</p>;
+  if (!cfg) return <p className="text-sm text-slate-500">Loading config...</p>;
+
+  const channelLabel: Record<string, string> = {
+    'sms': 'SMS',
+    'email': 'email',
+    'sms+email': 'SMS + email',
+    'voice': 'voice call',
+  };
+
+  return (
+    <div className="text-sm text-slate-700 space-y-1">
+      <p>
+        <span className="font-medium">Delay between stages:</span> {cfg.delay_days} day{cfg.delay_days === 1 ? '' : 's'}
+      </p>
+      <p>
+        <span className="font-medium">Sequence:</span>{' '}
+        {cfg.sequence.map((c, i) => (
+          <span key={i}>
+            {i > 0 && <span className="text-slate-400 mx-1">→</span>}
+            <span className="inline-block px-2 py-0.5 bg-slate-100 rounded text-xs">
+              Day {i * cfg.delay_days}: {channelLabel[c] || c}
+            </span>
+          </span>
+        ))}
+        <span className="text-slate-400 mx-1">→</span>
+        <span className="inline-block px-2 py-0.5 bg-amber-100 text-amber-800 rounded text-xs">
+          Day {cfg.sequence.length * cfg.delay_days}: manual call
+        </span>
+      </p>
+      <p className="text-xs text-slate-500 pt-1">
+        Configured via <code className="bg-slate-100 px-1 rounded">OUTREACH_STAGE_DELAY_DAYS</code> and{' '}
+        <code className="bg-slate-100 px-1 rounded">OUTREACH_CHANNEL_SEQUENCE</code> env vars. Restart the server after changing.
+      </p>
     </div>
   );
 }

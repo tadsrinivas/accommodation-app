@@ -21,42 +21,35 @@ interface Guest {
 }
 
 /**
- * Modal for editing a 'proposed' match — coordinator can swap host or guest.
- * Resets host_response/guest_response since the pairing has changed.
+ * Modal for manually creating a new match.
  *
- * Shows capacity info per host. If selected host's remaining capacity is less
- * than selected guest's party size, prompts coordinator to acknowledge.
+ * Two dropdowns (host, guest), both required. Shows live capacity preview.
+ * If selection exceeds capacity, requires explicit acknowledgement.
+ * On submit, calls POST /api/coordinator/matches/manual.
+ *
+ * No notifications are sent — match goes into 'proposed' state and gets
+ * picked up next time coordinator clicks "Notify all proposed matches".
  */
-export function EditMatchDialog({
-  matchId,
-  currentHostId,
-  currentGuestId,
-  currentHostName,
-  currentGuestName,
+export function ManualMatchDialog({
   token,
   onClose,
-  onSaved,
+  onCreated,
 }: {
-  matchId: string;
-  currentHostId: string;
-  currentGuestId: string;
-  currentHostName: string;
-  currentGuestName: string;
   token: string;
   onClose: () => void;
-  onSaved: () => void;
+  onCreated: (hostName: string, guestName: string) => void;
 }) {
   const [hosts, setHosts] = useState<Host[]>([]);
   const [guests, setGuests] = useState<Guest[]>([]);
-  const [hostId, setHostId] = useState(currentHostId);
-  const [guestId, setGuestId] = useState(currentGuestId);
+  const [hostId, setHostId] = useState<string>('');
+  const [guestId, setGuestId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [allowOver, setAllowOver] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/coordinator/matches/eligible?match_id=${matchId}`, {
+    fetch('/api/coordinator/matches/eligible', {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
@@ -67,9 +60,8 @@ export function EditMatchDialog({
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
-  }, [matchId, token]);
+  }, [token]);
 
-  // Compute live capacity preview based on current selection
   const selectedHost = hosts.find((h) => h.id === hostId);
   const selectedGuest = guests.find((g) => g.id === guestId);
   const overBy = selectedHost && selectedGuest
@@ -77,19 +69,19 @@ export function EditMatchDialog({
     : 0;
   const isOver = overBy > 0;
 
-  async function handleSave() {
-    if (hostId === currentHostId && guestId === currentGuestId) {
-      setError('Nothing changed.');
+  async function handleCreate() {
+    if (!hostId || !guestId) {
+      setError('Please select both a host and a guest.');
       return;
     }
     if (isOver && !allowOver) {
-      setError(`This selection exceeds host capacity by ${overBy}. Check the box below to proceed anyway.`);
+      setError(`This pairing exceeds host capacity by ${overBy}. Check the box below to proceed anyway.`);
       return;
     }
     setSubmitting(true);
     setError(null);
-    const res = await fetch(`/api/coordinator/matches/${matchId}`, {
-      method: 'PUT',
+    const res = await fetch('/api/coordinator/matches/manual', {
+      method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         host_id: hostId,
@@ -99,28 +91,24 @@ export function EditMatchDialog({
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      setError(body.error === 'overcapacity' ? body.message : (body.error || 'Save failed'));
+      setError(body.error === 'overcapacity' ? body.message : (body.error || 'Create failed'));
       setSubmitting(false);
       return;
     }
-    onSaved();
+    const d = await res.json();
+    onCreated(d.host_name || 'host', d.guest_name || 'guest');
   }
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-auto">
         <div className="p-6 border-b border-slate-200 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">Edit match</h2>
-            <p className="text-xs text-slate-500 mt-1">
-              Currently: <strong>{currentHostName}</strong> ↔ <strong>{currentGuestName}</strong>
-            </p>
-          </div>
+          <h2 className="text-lg font-semibold">Add manual match</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-2xl leading-none" aria-label="Close">×</button>
         </div>
 
         <div className="p-6 space-y-4">
-          {loading && <p className="text-sm text-slate-500">Loading options...</p>}
+          {loading && <p className="text-sm text-slate-500">Loading hosts and guests...</p>}
 
           {!loading && (
             <>
@@ -131,9 +119,7 @@ export function EditMatchDialog({
                   onChange={(e) => setHostId(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white"
                 >
-                  {!hosts.find((h) => h.id === currentHostId) && (
-                    <option value={currentHostId}>{currentHostName} (current)</option>
-                  )}
+                  <option value="">— Select a host —</option>
                   {hosts.map((h) => (
                     <option key={h.id} value={h.id}>
                       {h.name} (capacity {h.used_capacity}/{h.capacity}){h.host_type === 'hotel' ? ' [Hotel]' : ''}
@@ -149,9 +135,7 @@ export function EditMatchDialog({
                   onChange={(e) => setGuestId(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white"
                 >
-                  {!guests.find((g) => g.id === currentGuestId) && (
-                    <option value={currentGuestId}>{currentGuestName} (current)</option>
-                  )}
+                  <option value="">— Select a guest —</option>
                   {guests.map((g) => (
                     <option key={g.id} value={g.id}>
                       {g.name} ({g.party_size} guests, {g.arrival_date} → {g.departure_date})
@@ -160,30 +144,45 @@ export function EditMatchDialog({
                 </select>
               </div>
 
-              {isOver && (
-                <div className="bg-red-50 border border-red-200 rounded p-3 text-xs text-red-900">
-                  <p className="mb-2">
-                    <strong>Warning:</strong> This pairing exceeds host capacity by <strong>{overBy}</strong>.
-                    {selectedHost && (
-                      <> Host has {selectedHost.remaining_capacity} remaining
-                      (out of {selectedHost.capacity}); guest party is {selectedGuest?.party_size}.</>
-                    )}
-                  </p>
-                  <label className="flex items-start gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={allowOver}
-                      onChange={(e) => setAllowOver(e.target.checked)}
-                      className="mt-0.5"
-                    />
-                    <span>I understand this exceeds capacity — proceed anyway.</span>
-                  </label>
+              {selectedHost && selectedGuest && (
+                <div className={`border rounded p-3 text-xs ${
+                  isOver
+                    ? 'bg-red-50 border-red-200 text-red-900'
+                    : 'bg-green-50 border-green-200 text-green-900'
+                }`}>
+                  {isOver ? (
+                    <>
+                      <p className="mb-2">
+                        <strong>Warning:</strong> This pairing exceeds host capacity by <strong>{overBy}</strong>.
+                        Host has {selectedHost.remaining_capacity} remaining
+                        (out of {selectedHost.capacity}); guest party is {selectedGuest.party_size}.
+                      </p>
+                      <label className="flex items-start gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={allowOver}
+                          onChange={(e) => setAllowOver(e.target.checked)}
+                          className="mt-0.5"
+                        />
+                        <span>I understand this exceeds capacity — proceed anyway.</span>
+                      </label>
+                    </>
+                  ) : (
+                    <p>
+                      Capacity check ✓ — Host has {selectedHost.remaining_capacity} remaining
+                      (out of {selectedHost.capacity}); guest party is {selectedGuest.party_size}.
+                      {selectedHost.remaining_capacity - selectedGuest.party_size > 0 && (
+                        <> {selectedHost.remaining_capacity - selectedGuest.party_size} capacity will remain after this match.</>
+                      )}
+                    </p>
+                  )}
                 </div>
               )}
 
-              <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-900">
-                Editing this match will reset both parties&apos; accept/decline status.
-                You&apos;ll need to re-run notifications afterwards.
+              <div className="bg-slate-50 border border-slate-200 rounded p-3 text-xs text-slate-700">
+                The match will be created in <strong>proposed</strong> state. No notifications are sent
+                yet — click <strong>Notify all proposed matches</strong> on the dashboard when you&apos;re
+                ready to email both parties.
               </div>
             </>
           )}
@@ -196,9 +195,9 @@ export function EditMatchDialog({
             className="px-4 py-2 text-sm rounded border border-slate-300 bg-white">
             Cancel
           </button>
-          <button onClick={handleSave} disabled={submitting || loading || (isOver && !allowOver)}
+          <button onClick={handleCreate} disabled={submitting || loading || !hostId || !guestId || (isOver && !allowOver)}
             className="px-4 py-2 text-sm rounded bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50">
-            {submitting ? 'Saving...' : 'Save changes'}
+            {submitting ? 'Creating...' : 'Create match'}
           </button>
         </div>
       </div>
