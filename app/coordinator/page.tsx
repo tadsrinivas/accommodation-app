@@ -52,6 +52,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
   const [editMatchTarget, setEditMatchTarget] = useState<{ matchId: string; hostId: string; guestId: string; hostName: string; guestName: string } | null>(null);
   const [editProposalIndex, setEditProposalIndex] = useState<number | null>(null);
   const [showManualMatch, setShowManualMatch] = useState(false);
+  const [showDeclined, setShowDeclined] = useState(false);
   const [pending, setPending] = useState<any[]>([]);
   const [manualList, setManualList] = useState<any[]>([]);
   const [guests, setGuests] = useState<any[]>([]);
@@ -110,7 +111,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
     if (tab === 'hosts') { loadHosts(); loadPending(); }
     if (tab === 'outreach') { loadHosts(); loadManual(); }
     if (tab === 'guests') loadGuests();
-    if (tab === 'matches') loadMatches();
+    if (tab === 'matches') { loadMatches(); loadHosts(); loadGuests(); }
     if (tab === 'intake') loadIntake();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
@@ -264,7 +265,21 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
           )}
 
           <div>
-            <h2 className="text-lg font-semibold mb-2">All hosts</h2>
+            <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+              <h2 className="text-lg font-semibold">All hosts</h2>
+              {hosts.filter((h) => h.confirmed_available === false).length > 0 && (
+                <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showDeclined}
+                    onChange={(e) => setShowDeclined(e.target.checked)}
+                  />
+                  <span>
+                    Show declined ({hosts.filter((h) => h.confirmed_available === false).length})
+                  </span>
+                </label>
+              )}
+            </div>
             <p className="text-sm text-slate-600 mb-2">
               {hosts.length} host(s) total. {hosts.filter((h) => h.confirmed_available === true).length} available, {' '}
               {hosts.filter((h) => h.confirmed_available === false).length} declined, {' '}
@@ -278,7 +293,9 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
                   </tr>
                 </thead>
                 <tbody>
-                  {hosts.map((h) => (
+                  {hosts
+                    .filter((h) => showDeclined || h.confirmed_available !== false)
+                    .map((h) => (
                     <tr key={h.id} className="border-t border-slate-100">
                       <Td>
                         <div className="flex items-center gap-2">
@@ -467,6 +484,35 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
 
       {tab === 'matches' && (
         <section className="space-y-6">
+          {/* Capacity & demand summary */}
+          {(() => {
+            const eligibleHosts = hosts.filter(
+              (h) => h.approval_status === 'approved' && h.confirmed_available === true && !h.cancelled_at
+            );
+            const totalCapacity = eligibleHosts.reduce((sum, h) => sum + (h.capacity || 0), 0);
+            const usedCapacity = eligibleHosts.reduce((sum, h) => sum + (h.used_capacity || 0), 0);
+            const remainingCapacity = totalCapacity - usedCapacity;
+            const totalGuests = guests.reduce((sum, g) => sum + (g.party_size || 0), 0);
+            const guestPartyCount = guests.length;
+            const shortfall = totalGuests - totalCapacity;
+            return (
+              <div className="bg-white border border-slate-200 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-slate-700 mb-3">Capacity vs demand</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <SummaryStat label="Total guests" value={totalGuests} sublabel={`${guestPartyCount} party${guestPartyCount === 1 ? '' : 's'}`} />
+                  <SummaryStat label="Host capacity" value={totalCapacity} sublabel={`${eligibleHosts.length} host${eligibleHosts.length === 1 ? '' : 's'}`} />
+                  <SummaryStat label="Used" value={usedCapacity} sublabel={`${remainingCapacity} remaining`} />
+                  <SummaryStat
+                    label={shortfall > 0 ? 'Shortfall' : 'Buffer'}
+                    value={Math.abs(shortfall)}
+                    sublabel={shortfall > 0 ? 'guests over capacity' : 'spare capacity'}
+                    color={shortfall > 0 ? 'red' : 'green'}
+                  />
+                </div>
+              </div>
+            );
+          })()}
+
           <div>
             <div className="flex justify-between items-center mb-3 gap-2 flex-wrap">
               <h2 className="text-lg font-semibold">Proposed matches ({proposals.length})</h2>
@@ -785,5 +831,29 @@ function SmallBtn({ children, onClick, color }: { children: React.ReactNode; onC
     <button onClick={onClick} className={`px-2 py-1 text-xs rounded font-medium ${classes}`}>
       {children}
     </button>
+  );
+}
+
+function SummaryStat({
+  label,
+  value,
+  sublabel,
+  color,
+}: {
+  label: string;
+  value: number;
+  sublabel?: string;
+  color?: 'red' | 'green';
+}) {
+  const valueColor =
+    color === 'red' ? 'text-red-700' :
+    color === 'green' ? 'text-green-700' :
+    'text-slate-900';
+  return (
+    <div className="text-center">
+      <div className={`text-3xl font-bold ${valueColor}`}>{value}</div>
+      <div className="text-xs text-slate-600 font-medium">{label}</div>
+      {sublabel && <div className="text-xs text-slate-500 mt-0.5">{sublabel}</div>}
+    </div>
   );
 }
