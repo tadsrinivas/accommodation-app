@@ -202,6 +202,9 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
           <a href="/coordinator/audit" className="text-sm text-amber-700 hover:text-amber-900 underline">
             Records needing attention
           </a>
+          <a href="/coordinator/broadcast" className="text-sm text-blue-700 hover:text-blue-900 underline">
+            Broadcast email
+          </a>
           <button onClick={onLogout} className="text-sm text-slate-500 hover:text-slate-700">Logout</button>
         </div>
       </header>
