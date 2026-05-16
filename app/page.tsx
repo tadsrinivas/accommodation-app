@@ -2,10 +2,14 @@ import Link from 'next/link';
 
 export default function Home() {
   const eventName = process.env.EVENT_NAME || 'Our Event';
+  const eventDates = process.env.EVENT_DATES || 'June 5th – 7th, 2026';
   return (
     <div className="space-y-8">
       <header className="text-center space-y-2 pt-12">
         <h1 className="text-4xl font-bold">{eventName}</h1>
+        {eventDates && (
+          <p className="text-lg text-slate-700 font-medium">{eventDates}</p>
+        )}
         <p className="text-slate-600">Accommodation coordination</p>
       </header>
 

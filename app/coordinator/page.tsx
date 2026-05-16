@@ -410,16 +410,24 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
         <section className="space-y-3">
           <p className="text-sm text-slate-600">{guests.length} guest request(s).</p>
           <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
-            <table className="w-full text-sm min-w-[800px]">
+            <table className="w-full text-sm min-w-[900px]">
               <thead className="bg-slate-50">
                 <tr>
-                  <Th>Name</Th><Th>Email</Th><Th>Arrival</Th><Th>Departure</Th><Th>Party</Th><Th>Notes</Th><Th>Actions</Th>
+                  <Th>Name</Th><Th>Email</Th><Th>Phone</Th><Th>Arrival</Th><Th>Departure</Th><Th>Party</Th><Th>Notes</Th><Th>Actions</Th>
                 </tr>
               </thead>
               <tbody>
                 {guests.map((g) => (
                   <tr key={g.id} className="border-t border-slate-100">
-                    <Td>{g.name}</Td><Td>{g.email}</Td><Td>{g.arrival_date}</Td><Td>{g.departure_date}</Td><Td>{g.party_size}</Td><Td>{g.notes || '—'}</Td>
+                    <Td>{g.name}</Td>
+                    <Td className="text-xs">{g.email}</Td>
+                    <Td className="text-xs">
+                      {g.phone ? <a className="text-blue-600 hover:underline" href={`tel:${g.phone}`}>{g.phone}</a> : '—'}
+                    </Td>
+                    <Td>{g.arrival_date}</Td>
+                    <Td>{g.departure_date}</Td>
+                    <Td>{g.party_size}</Td>
+                    <Td>{g.notes || '—'}</Td>
                     <Td>
                       <div className="flex gap-1">
                         <button

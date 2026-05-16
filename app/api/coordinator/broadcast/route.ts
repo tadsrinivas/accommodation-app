@@ -101,12 +101,26 @@ export async function POST(req: NextRequest) {
   let failed = 0;
   const errors: string[] = [];
 
-  for (const guest of recipients) {
+  // Resend rate limit: typically 2-10 req/sec depending on plan.
+  // We throttle to ~4/sec (250ms between sends) to stay safely under the
+  // common 5/sec ceiling. If a send fails with a rate-limit error, we
+  // back off and retry once.
+  const THROTTLE_MS = 250;
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  function isRateLimitError(msg: string | undefined): boolean {
+    if (!msg) return false;
+    const lower = msg.toLowerCase();
+    return lower.includes('too many requests') || lower.includes('rate limit') || lower.includes('429');
+  }
+
+  for (let i = 0; i < recipients.length; i++) {
+    const guest = recipients[i];
     // Substitute {name} — case-insensitive — in both subject and body
     const personalizedSubject = subject.replace(/\{name\}/gi, guest.name || 'there');
     const personalizedBody = msgBody.replace(/\{name\}/gi, guest.name || 'there');
 
-    const result = await sendEmail({
+    let result = await sendEmail({
       to: guest.email!,
       subject: personalizedSubject,
       html: toHtml(personalizedBody),
@@ -116,6 +130,20 @@ export async function POST(req: NextRequest) {
       purpose: 'broadcast_email',
     });
 
+    // Retry once if we hit a rate-limit error
+    if (!result.ok && isRateLimitError(result.error)) {
+      await sleep(2000); // Back off for 2 seconds
+      result = await sendEmail({
+        to: guest.email!,
+        subject: personalizedSubject,
+        html: toHtml(personalizedBody),
+        text: personalizedBody,
+        recipientType: 'guest',
+        recipientId: guest.id,
+        purpose: 'broadcast_email',
+      });
+    }
+
     if (result.ok) {
       sent++;
     } else {
@@ -123,6 +151,12 @@ export async function POST(req: NextRequest) {
       if (errors.length < 10) {
         errors.push(`${guest.email}: ${result.error || 'unknown error'}`);
       }
+    }
+
+    // Throttle: small delay between sends to stay under provider rate limits.
+    // Skip the delay on the last iteration since there's nothing else to send.
+    if (i < recipients.length - 1) {
+      await sleep(THROTTLE_MS);
     }
   }
 
