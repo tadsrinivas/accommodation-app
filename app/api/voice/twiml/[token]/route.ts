@@ -40,7 +40,7 @@ async function handle(req: NextRequest, token: string) {
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Gather numDigits="1" action="${escapeXml(gatherUrl)}" method="POST" timeout="8">
-    ${safeSay(`Hare Krishna, this is Srinivas from ISKCON Atlanta. I'm calling about the upcoming Jagannath Ratha Yatra and Panihati festival from June 5th to 7th. We’re expecting a lot of out-of-town devotees this year, so, we're checking to see if you might have space to accommodate any guests—completely based on your own convenience.`)}    
+    ${safeSay(`Hare Krishna, It is a message from ISKCON Atlanta. We are calling about the upcoming Jagannath Ratha Yatra and Panihati festival from June 5th to 7th. We’re expecting a lot of out-of-town devotees this year, so, we're checking to see if you might have space to accommodate any guests— completely based on your own convenience.`)}    
     <Pause length="1"/>
     ${say(`If you're able to host, please press one. If you're not able to this year, please press two. To repeat this message, please press nine.`)}
   </Gather>
