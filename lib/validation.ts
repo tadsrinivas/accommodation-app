@@ -61,6 +61,27 @@ export const GuestEditSchema = z.object({
 
 export type GuestEdit = z.infer<typeof GuestEditSchema>;
 
+// ----------------------------------------------------------------
+// Coordinator-create guest — permissive: name + dates always required,
+// at least ONE of email/phone required, all others optional.
+// Mirrors the host-import philosophy: minimum viable record.
+// ----------------------------------------------------------------
+export const CoordGuestCreateSchema = z.object({
+  name: z.string().min(1, 'Please enter the guest name').max(200),
+  email: z.string().email('Please enter a valid email').optional().or(z.literal('')),
+  phone: z.string().min(7, 'Phone number too short').max(30).optional().or(z.literal('')),
+  arrival_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Please enter a valid arrival date'),
+  departure_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Please enter a valid departure date'),
+  party_size: z.coerce.number().int().min(1).max(20),
+  notes: z.string().max(1000).optional().or(z.literal('')),
+  send_confirmation: z.boolean().optional().default(true),
+}).refine(
+  (data) => (data.email && data.email.length > 0) || (data.phone && data.phone.length > 0),
+  { message: 'At least one of email or phone is required', path: ['email'] }
+);
+
+export type CoordGuestCreate = z.infer<typeof CoordGuestCreateSchema>;
+
 // Disposable email domains we reject. Add more as needed.
 export const DISPOSABLE_EMAIL_DOMAINS = new Set<string>([
   'mailinator.com',

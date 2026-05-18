@@ -4,7 +4,10 @@ import { useEffect, useState } from 'react';
 
 /**
  * Coordinator-only edit modal for a single host or guest record.
- * Loads the record on open, lets coordinator update any field, saves on submit.
+ *
+ * Two modes:
+ *   - Edit: pass recordId. Loads the record, updates via PUT.
+ *   - Create: pass recordId={null}. Starts with empty defaults, creates via POST.
  *
  * Validation is server-side; the modal shows whatever error the API returns.
  */
@@ -16,17 +19,24 @@ export function EditRecordDialog({
   onSaved,
 }: {
   recordType: 'host' | 'guest';
-  recordId: string;
+  recordId: string | null;
   token: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [loading, setLoading] = useState(true);
+  const isCreating = recordId === null || recordId === '';
+  const [loading, setLoading] = useState(!isCreating);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [record, setRecord] = useState<any>(null);
+  const [record, setRecord] = useState<any>(
+    isCreating
+      ? defaultRecord(recordType)
+      : null
+  );
 
   useEffect(() => {
+    if (isCreating) return; // No load needed in create mode
+
     const url = recordType === 'host'
       ? `/api/coordinator/hosts/${recordId}`
       : `/api/coordinator/guests/${recordId}`;
@@ -39,7 +49,7 @@ export function EditRecordDialog({
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
-  }, [recordType, recordId, token]);
+  }, [recordType, recordId, token, isCreating]);
 
   function setField(key: string, value: any) {
     setRecord({ ...record, [key]: value });
@@ -49,7 +59,6 @@ export function EditRecordDialog({
     setSubmitting(true);
     setError(null);
 
-    // Build the payload — only include fields the user might have edited.
     let payload: any;
     if (recordType === 'host') {
       payload = {
@@ -73,14 +82,25 @@ export function EditRecordDialog({
         party_size: record.party_size,
         notes: record.notes,
       };
+      // Include send_confirmation only in create mode
+      if (isCreating) {
+        payload.send_confirmation = record.send_confirmation !== false;
+      }
     }
 
-    const url = recordType === 'host'
-      ? `/api/coordinator/hosts/${recordId}`
-      : `/api/coordinator/guests/${recordId}`;
+    // Create (POST to collection) vs Update (PUT to item)
+    const url = isCreating
+      ? (recordType === 'host'
+          ? '/api/coordinator/hosts'  // (host create not implemented in this bundle)
+          : '/api/coordinator/guests')
+      : (recordType === 'host'
+          ? `/api/coordinator/hosts/${recordId}`
+          : `/api/coordinator/guests/${recordId}`);
+
+    const method = isCreating ? 'POST' : 'PUT';
 
     const res = await fetch(url, {
-      method: 'PUT',
+      method,
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -90,20 +110,29 @@ export function EditRecordDialog({
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      setError(body.error || 'Save failed');
+      // Surface zod validation issues if present
+      let msg = body.error || 'Save failed';
+      if (body.issues?.fieldErrors) {
+        const firstField = Object.keys(body.issues.fieldErrors)[0];
+        const firstErr = body.issues.fieldErrors[firstField]?.[0];
+        if (firstErr) msg = `${firstField}: ${firstErr}`;
+      }
+      setError(msg);
       setSubmitting(false);
       return;
     }
     onSaved();
   }
 
+  const title = isCreating
+    ? (recordType === 'host' ? 'Add host' : 'Add guest')
+    : `Edit ${recordType}${record?.name ? `: ${record.name}` : ''}`;
+
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-auto">
         <div className="p-6 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">
-            Edit {recordType}{record?.name ? `: ${record.name}` : ''}
-          </h2>
+          <h2 className="text-lg font-semibold">{title}</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-2xl leading-none" aria-label="Close">×</button>
         </div>
 
@@ -169,14 +198,37 @@ export function EditRecordDialog({
           {!loading && record && recordType === 'guest' && (
             <>
               <Field label="Name" value={record.name || ''} onChange={(v) => setField('name', v)} required />
-              <Field label="Email" type="email" value={record.email || ''} onChange={(v) => setField('email', v)} required />
+              <Field label="Email" type="email" value={record.email || ''} onChange={(v) => setField('email', v)} required={!isCreating} />
               <Field label="Phone" type="tel" value={record.phone || ''} onChange={(v) => setField('phone', v)} />
+              {isCreating && (
+                <p className="text-xs text-slate-500 -mt-2">Either email or phone is required.</p>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Arrival" type="date" value={record.arrival_date || ''} onChange={(v) => setField('arrival_date', v)} required />
                 <Field label="Departure" type="date" value={record.departure_date || ''} onChange={(v) => setField('departure_date', v)} required />
               </div>
               <NumberField label="Party size" value={record.party_size || 1} onChange={(v) => setField('party_size', v)} min={1} max={20} />
               <TextArea label="Notes" value={record.notes || ''} onChange={(v) => setField('notes', v)} rows={3} />
+
+              {isCreating && (
+                <div className="bg-slate-50 border border-slate-200 rounded p-3">
+                  <label className="flex items-start gap-2 cursor-pointer text-sm">
+                    <input
+                      type="checkbox"
+                      checked={record.send_confirmation !== false}
+                      onChange={(e) => setField('send_confirmation', e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      <span className="font-medium">Send intake confirmation</span>
+                      <span className="block text-xs text-slate-500 mt-0.5">
+                        The guest will receive an email and SMS confirming we&apos;ve received their request.
+                        Uncheck if they don&apos;t need to be notified (e.g., already discussed by phone).
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -196,7 +248,7 @@ export function EditRecordDialog({
             disabled={submitting || loading || !record}
             className="px-4 py-2 text-sm rounded bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50"
           >
-            {submitting ? 'Saving...' : 'Save changes'}
+            {submitting ? 'Saving...' : (isCreating ? 'Create' : 'Save changes')}
           </button>
         </div>
       </div>
@@ -204,10 +256,39 @@ export function EditRecordDialog({
   );
 }
 
+function defaultRecord(recordType: 'host' | 'guest') {
+  if (recordType === 'host') {
+    return {
+      name: '',
+      email: '',
+      phone: '',
+      capacity: 1,
+      address: '',
+      notes: '',
+      host_type: 'residence',
+      approval_status: 'approved',
+      confirmed_available: null,
+    };
+  }
+  // guest
+  return {
+    name: '',
+    email: '',
+    phone: '',
+    arrival_date: '',
+    departure_date: '',
+    party_size: 1,
+    notes: '',
+    send_confirmation: true,
+  };
+}
+
 function Field({ label, value, onChange, type = 'text', required }: { label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean }) {
   return (
     <div>
-      <label className="block text-sm font-medium mb-1">{label}</label>
+      <label className="block text-sm font-medium mb-1">
+        {label}{required && <span className="text-red-600 ml-0.5">*</span>}
+      </label>
       <input
         type={type}
         value={value}

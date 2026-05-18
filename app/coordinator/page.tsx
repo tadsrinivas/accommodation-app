@@ -48,7 +48,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
   const [tab, setTab] = useState<'hosts' | 'outreach' | 'guests' | 'matches' | 'intake' | 'removed'>('hosts');
   const [hosts, setHosts] = useState<any[]>([]);
   const [removeTarget, setRemoveTarget] = useState<{ type: 'host' | 'guest'; id: string; name: string } | null>(null);
-  const [editTarget, setEditTarget] = useState<{ type: 'host' | 'guest'; id: string } | null>(null);
+  const [editTarget, setEditTarget] = useState<{ type: 'host' | 'guest'; id: string | null } | null>(null);
   const [editMatchTarget, setEditMatchTarget] = useState<{ matchId: string; hostId: string; guestId: string; hostName: string; guestName: string } | null>(null);
   const [editProposalIndex, setEditProposalIndex] = useState<number | null>(null);
   const [showManualMatch, setShowManualMatch] = useState(false);
@@ -408,7 +408,15 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
 
       {tab === 'guests' && (
         <section className="space-y-3">
-          <p className="text-sm text-slate-600">{guests.length} guest request(s).</p>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <p className="text-sm text-slate-600">{guests.length} guest request(s).</p>
+            <button
+              onClick={() => setEditTarget({ type: 'guest', id: null })}
+              className="px-3 py-2 text-sm border border-blue-600 text-blue-700 rounded-md hover:bg-blue-50 font-medium"
+            >
+              + Add guest
+            </button>
+          </div>
           <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
             <table className="w-full text-sm min-w-[900px]">
               <thead className="bg-slate-50">
@@ -664,8 +672,10 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
           token={token}
           onClose={() => setEditTarget(null)}
           onSaved={() => {
+            const wasCreating = editTarget.id === null;
+            const typeLabel = editTarget.type === 'host' ? 'Host' : 'Guest';
             setEditTarget(null);
-            setStatus('Saved.');
+            setStatus(wasCreating ? `${typeLabel} created.` : 'Saved.');
             if (editTarget.type === 'host') loadHosts();
             else loadGuests();
           }}
