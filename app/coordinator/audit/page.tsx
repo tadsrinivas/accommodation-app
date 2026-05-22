@@ -96,36 +96,52 @@ export default function AuditPage() {
         ↻ Refresh
       </button>
 
-      {/* Counts */}
-      <div className="grid grid-cols-3 gap-4">
-        <CountCard label="Hosts (no email)" count={data.counts.hostsNoEmail} color="amber" />
+      {/*
+        Count cards. The "Hosts (no email)" count is hidden because hosts can
+        now self-correct via the profile edit page (they fill in their email
+        when it's empty). Switched to 2-column grid since one card is hidden.
+        To restore, set the conditional back to true and switch grid back to grid-cols-3.
+      */}
+      <div className="grid grid-cols-2 gap-4">
+        {false && (
+          <CountCard label="Hosts (no email)" count={data.counts.hostsNoEmail} color="amber" />
+        )}
         <CountCard label="Stuck voice intakes" count={data.counts.stuckIntakes} color="red" />
         <CountCard label="Confirmed hosts (no email)" count={data.counts.confirmedNoEmail} color="blue" />
       </div>
 
-      {/* Hosts without email */}
-      <Section
-        title="Hosts without email — being contacted via SMS/voice only"
-        description="These are imported hosts who don't have an email on file. The outreach scheduler will still contact them via phone (when SMS works), but you should call them personally to capture their email if possible."
-        empty={data.hostsNoEmail.length === 0}
-      >
-        {data.hostsNoEmail.map((h) => (
-          <Row key={h.id}>
-            <div className="flex-1">
-              <div className="font-medium">{h.name}</div>
-              <div className="text-xs text-slate-600">
-                {h.phone || 'no phone'} · capacity {h.capacity || '?'} · source: {h.source || 'unknown'}
+      {/*
+        "Hosts without email" section is hidden from the UI but the backend
+        query still returns the data (data.hostsNoEmail is still populated).
+        Rationale: imported hosts without email can now fill it in themselves
+        via their profile edit page, so coordinator no longer needs to chase
+        them manually. To restore, remove the `{false && (` wrapper and the
+        matching `)}` below.
+      */}
+      {false && (
+        <Section
+          title="Hosts without email — being contacted via SMS/voice only"
+          description="These are imported hosts who don't have an email on file. The outreach scheduler will still contact them via phone (when SMS works), but you should call them personally to capture their email if possible."
+          empty={data.hostsNoEmail.length === 0}
+        >
+          {data.hostsNoEmail.map((h) => (
+            <Row key={h.id}>
+              <div className="flex-1">
+                <div className="font-medium">{h.name}</div>
+                <div className="text-xs text-slate-600">
+                  {h.phone || 'no phone'} · capacity {h.capacity || '?'} · source: {h.source || 'unknown'}
+                </div>
+                <div className="text-xs text-slate-500 mt-1">
+                  Outreach: step {h.outreach_step}, last attempt {fmt(h.last_attempt_at)} ·
+                  Status: {h.confirmed_available === null ? 'awaiting' : h.confirmed_available ? 'confirmed' : 'declined'}
+                </div>
               </div>
-              <div className="text-xs text-slate-500 mt-1">
-                Outreach: step {h.outreach_step}, last attempt {fmt(h.last_attempt_at)} ·
-                Status: {h.confirmed_available === null ? 'awaiting' : h.confirmed_available ? 'confirmed' : 'declined'}
-              </div>
-            </div>
-            <a href={h.profile_link} target="_blank" rel="noopener noreferrer"
-               className="text-xs text-blue-600 hover:underline">Profile link</a>
-          </Row>
-        ))}
-      </Section>
+              <a href={h.profile_link} target="_blank" rel="noopener noreferrer"
+                 className="text-xs text-blue-600 hover:underline">Profile link</a>
+            </Row>
+          ))}
+        </Section>
+      )}
 
       {/* Stuck intakes */}
       <Section
