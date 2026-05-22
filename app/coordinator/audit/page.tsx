@@ -104,7 +104,7 @@ export default function AuditPage() {
       */}
       <div className="grid grid-cols-2 gap-4">
         {false && (
-          <CountCard label="Hosts (no email)" count={data.counts.hostsNoEmail} color="amber" />
+          <CountCard label="Hosts (no email)" count={data!.counts.hostsNoEmail} color="amber" />
         )}
         <CountCard label="Stuck voice intakes" count={data.counts.stuckIntakes} color="red" />
         <CountCard label="Confirmed hosts (no email)" count={data.counts.confirmedNoEmail} color="blue" />
@@ -122,9 +122,9 @@ export default function AuditPage() {
         <Section
           title="Hosts without email — being contacted via SMS/voice only"
           description="These are imported hosts who don't have an email on file. The outreach scheduler will still contact them via phone (when SMS works), but you should call them personally to capture their email if possible."
-          empty={data.hostsNoEmail.length === 0}
+          empty={data!.hostsNoEmail.length === 0}
         >
-          {data.hostsNoEmail.map((h) => (
+          {data!.hostsNoEmail.map((h) => (
             <Row key={h.id}>
               <div className="flex-1">
                 <div className="font-medium">{h.name}</div>
