@@ -53,6 +53,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
   const [editProposalIndex, setEditProposalIndex] = useState<number | null>(null);
   const [showManualMatch, setShowManualMatch] = useState(false);
   const [showDeclined, setShowDeclined] = useState(false);
+  const [showCancelled, setShowCancelled] = useState(false);
   const [pending, setPending] = useState<any[]>([]);
   const [manualList, setManualList] = useState<any[]>([]);
   const [guests, setGuests] = useState<any[]>([]);
@@ -588,7 +589,23 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
 
           <div>
             <div className="flex justify-between items-center mb-3 gap-2 flex-wrap">
-              <h2 className="text-lg font-semibold">Saved matches ({existing.length})</h2>
+              <div className="flex items-center gap-3 flex-wrap">
+                <h2 className="text-lg font-semibold">
+                  Saved matches ({existing.filter((m) => showCancelled || m.status !== 'cancelled').length})
+                </h2>
+                {existing.filter((m) => m.status === 'cancelled').length > 0 && (
+                  <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showCancelled}
+                      onChange={(e) => setShowCancelled(e.target.checked)}
+                    />
+                    <span>
+                      Show cancelled ({existing.filter((m) => m.status === 'cancelled').length})
+                    </span>
+                  </label>
+                )}
+              </div>
               <button onClick={notifyAll} className="px-4 py-2 bg-green-600 text-white text-sm rounded-md font-medium hover:bg-green-700">Notify all proposed matches</button>
             </div>
             <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
@@ -597,13 +614,15 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
                   <tr><Th>Host</Th><Th>Guest</Th><Th>Status</Th><Th>Host response</Th><Th>Guest response</Th><Th>Exchanged</Th><Th>Actions</Th></tr>
                 </thead>
                 <tbody>
-                  {existing.map((m) => {
+                  {existing
+                    .filter((m) => showCancelled || m.status !== 'cancelled')
+                    .map((m) => {
                     const host = Array.isArray(m.hosts) ? m.hosts[0] : m.hosts;
                     const guest = Array.isArray(m.guests) ? m.guests[0] : m.guests;
                     const isCancelled = m.status === 'cancelled';
                     const canEdit = m.status === 'proposed';
                     return (
-                      <tr key={m.id} className="border-t border-slate-100">
+                      <tr key={m.id} className={`border-t border-slate-100 ${isCancelled ? 'opacity-60' : ''}`}>
                         <Td>{host?.name}</Td>
                         <Td>{guest?.name}</Td>
                         <Td><Badge color={m.status === 'confirmed' ? 'green' : m.status === 'declined' || m.status === 'cancelled' ? 'slate' : 'amber'}>{m.status}</Badge></Td>
